@@ -2,9 +2,8 @@ use crate::chess::types::square::Square;
 use crate::chess::bitboard::Bitboard;
 
 #[inline(always)]
-pub fn get_squares(bitboard: Bitboard) -> Vec<Square> {
+pub fn all_squares(mut mask: u64) -> Vec<Square> {
     let mut all_squares = Vec::new();
-    let mut mask = bitboard.0;
     
     while mask != 0 {
         let lsb = next(mask);

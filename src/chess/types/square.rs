@@ -1,10 +1,8 @@
-use std::fmt::Display;
 use crate::chess::types::file::File;
 use crate::chess::types::rank::Rank;
-
+use std::fmt::Display;
 use std::mem;
-use std::ops::{BitOr, BitAnd, BitXor, Rem};
-use crate::chess::consts::NUM_SQUARES;
+use std::ops::Rem;
 
 #[repr(u8)]
 #[derive(Clone,Copy)]
@@ -58,9 +56,9 @@ impl PartialEq<u8> for Square {
 impl Square{
     pub fn mask(&self) -> u64{ 1 << *self as usize }
 
-    pub fn file(&self) -> u8 { (*self as u8) % 8 }
+    pub fn file(&self) -> File { File::from( (*self as u8) % 8 ) }
 
-    pub fn rank(&self) -> u8 { (*self as u8) / 8 }
+    pub fn rank(&self) -> Rank { Rank::from( (*self as u8) / 8 ) }
 
     pub fn vert_flip(&self) -> u8{ *self as u8 ^ 56 }
 }

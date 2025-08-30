@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use crate::chess::types::color::Color;
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -36,6 +37,24 @@ impl Rank {
     pub fn minus(&mut self){
         self.sub(1);
     }
+
+    pub fn is_pawn_start(&self, color: Color) -> bool{
+
+        match color {
+            Color::White => { *self as u8 == 1 }
+            Color::Black => { *self as u8 == 6 }
+        }
+
+    }
+
+    pub fn is_pawn_promotion(&self, color: Color) -> bool{
+
+        match color {
+            Color::White => { *self as u8 == 7 }
+            Color::Black => { *self as u8 == 0 }
+        }
+
+    }
 }
 
 
@@ -43,13 +62,13 @@ impl Display for Rank {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 
         let file_as_char = match self {
-            Rank::First => '1',
+            Rank::First =>  '1',
             Rank::Second => '2',
-            Rank::Third => '3',
+            Rank::Third =>  '3',
             Rank::Fourth => '4',
-            Rank::Fifth => '5',
-            Rank::Sixth => '6',
-            Rank::Seventh => '7',
+            Rank::Fifth =>  '5',
+            Rank::Sixth =>  '6',
+            Rank::Seventh =>'7',
             Rank::Eighth => '8',
         };
 

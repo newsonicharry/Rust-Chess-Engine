@@ -1,7 +1,6 @@
 use crate::chess::bitboard::Bitboard;
-use crate::chess::consts::NUM_PIECES;
 use crate::chess::types::square::Square;
-use crate::general::bits::get_squares;
+use crate::general::bits::all_squares;
 
 const MAX_PIECE_LEN: usize = 10;
 
@@ -28,7 +27,7 @@ impl Default for PieceList {
 impl PieceList {
 
     pub fn new(&mut self, bitboard: Bitboard){
-        let squares = get_squares(bitboard);
+        let squares = all_squares(bitboard.0);
 
         for (i, square) in squares.iter().enumerate(){
             self.map[*square as usize] = i as u8;
