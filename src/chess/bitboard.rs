@@ -4,7 +4,7 @@ use crate::chess::types::square::Square;
 
 #[derive(Copy)]
 #[derive(Clone)]
-pub struct Bitboard(u64);
+pub struct Bitboard(pub u64);
 
 impl Default for Bitboard {
     fn default() -> Self {

@@ -1,13 +1,19 @@
-use std::fmt::Display;
 use crate::chess::bitboard::Bitboard;
-use crate::chess::types::piece::{Piece, char_to_piece};
-use crate::chess::consts::{NUM_PIECES, NUM_FILES, NUM_RANKS};
+use crate::chess::consts::{NUM_PIECES, NUM_SQUARES};
+use crate::chess::piece_list::PieceList;
+use crate::chess::types::color::Color;
 use crate::chess::types::file::File;
+use crate::chess::types::piece::{char_to_piece, Piece};
 use crate::chess::types::rank::Rank;
-
+use crate::chess::types::square::Square;
+use std::fmt::Display;
 
 pub struct Board{
     bitboards: [Bitboard; NUM_PIECES],
+    piece_lists: [PieceList; NUM_PIECES],
+    piece_squares: [Piece; NUM_SQUARES],
+
+    side_to_move: Color,
 }
 
 
@@ -15,6 +21,10 @@ impl Default for Board {
     fn default() -> Board {
         let board = Board{
             bitboards: [Bitboard::default(); NUM_PIECES],
+            piece_lists: [PieceList::default(); NUM_PIECES],
+            piece_squares: [Piece::NoPiece; NUM_SQUARES],
+
+            side_to_move: Color::White,
         };
 
         board
@@ -42,24 +52,66 @@ impl Board{
                     cur_file.add(num_skipped_files);
                     continue;
                 }
-                
-                
+
+                let cur_square = Square::from((cur_file, rank));
+                cur_file.plus();
                 let piece = char_to_piece(char).unwrap();
 
-
+                self.add_piece(piece, cur_square);
             }
         }
 
     }
 
+    fn add_piece(&mut self, piece: Piece, square: Square){
+        self.bitboards[piece as usize].add_piece(square);
+        self.piece_lists[piece as usize].add_piece(square);
+        self.piece_squares[square as usize] = piece;
+    }
+
+    pub fn piece_at(&self, square: Square) -> Piece{
+        self.piece_squares[square as usize]
+    }
 
 }
 
+const TOP_SECTION: &str    = "┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐";
+const MIDDLE_SECTION: &str = "├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤";
+const BOTTOM_SECTION: &str = "└─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘";
+const SIDE_BAR: &str = "│";
 
-// impl Display for Board {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//
-//
-//
-//     }
-// }
+
+impl Display for Board {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+
+        let mut pretty_print = TOP_SECTION.to_string();
+
+        for i in 0..NUM_SQUARES {
+
+            if i % 8 == 0 {
+
+                if i != 0 {
+                    pretty_print += &*(SIDE_BAR.to_owned() + "\n" + MIDDLE_SECTION + "\n");
+                }
+                else {
+                    pretty_print += "\n";
+                }
+
+            }
+
+            let square = Square::from((i ^ 56) as u8);
+            let piece = self.piece_at(square);
+            let piece_as_str = piece.to_string();
+
+            pretty_print += &*(SIDE_BAR.to_owned() + "  " + piece_as_str.as_str() + "  ");
+
+        }
+
+        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION);
+
+        write!(f, "{}", pretty_print)
+
+
+    }
+}
