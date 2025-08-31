@@ -14,3 +14,5 @@ pub const BLACK_PAWN_ATTACKS_DIRECTIONS: [(i8,i8); 2] = [(1, -1), (-1, -1)];
 
 pub const NUM_ORTHOGONAL_ENTRIES: usize = 102400;
 pub const NUM_DIAGONAL_ENTRIES: usize = 5248;
+
+pub const USE_BMI2: bool = true;

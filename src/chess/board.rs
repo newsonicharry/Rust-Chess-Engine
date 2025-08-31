@@ -9,11 +9,15 @@ use crate::chess::types::square::Square;
 use std::fmt::Display;
 
 pub struct Board{
-    bitboards: [Bitboard; NUM_PIECES],
-    piece_lists: [PieceList; NUM_PIECES],
-    piece_squares: [Piece; NUM_SQUARES],
+    pub bitboards: [Bitboard; NUM_PIECES],
+    pub piece_lists: [PieceList; NUM_PIECES],
+    pub piece_squares: [Piece; NUM_SQUARES],
 
-    side_to_move: Color,
+    pub side_to_move: Color,
+
+    pub white_occupancy: u64,
+    pub black_occupancy: u64,
+    pub occupancy: u64,
 }
 
 
@@ -25,6 +29,10 @@ impl Default for Board {
             piece_squares: [Piece::NoPiece; NUM_SQUARES],
 
             side_to_move: Color::White,
+
+            white_occupancy: 0,
+            black_occupancy: 0,
+            occupancy: 0,
         };
 
         board
