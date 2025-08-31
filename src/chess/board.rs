@@ -3,21 +3,27 @@ use crate::chess::consts::{NUM_PIECES, NUM_SQUARES};
 use crate::chess::piece_list::PieceList;
 use crate::chess::types::color::Color;
 use crate::chess::types::file::File;
-use crate::chess::types::piece::{char_to_piece, Piece};
+use crate::chess::types::piece::{char_to_piece, Piece, ITER_WHITE, ITER_BLACK, BasePiece};
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
+use crate::chess::types::piece::Piece::{WhiteQueen, WhiteRook, BlackRook, BlackQueen, WhiteBishop, BlackBishop};
 
 pub struct Board{
-    pub bitboards: [Bitboard; NUM_PIECES],
-    pub piece_lists: [PieceList; NUM_PIECES],
-    pub piece_squares: [Piece; NUM_SQUARES],
+    bitboards: [Bitboard; NUM_PIECES],
+    piece_lists: [PieceList; NUM_PIECES],
+    piece_squares: [Piece; NUM_SQUARES],
 
-    pub side_to_move: Color,
+    side_to_move: Color,
 
-    pub white_occupancy: u64,
-    pub black_occupancy: u64,
-    pub occupancy: u64,
+    white_occupancy: u64,
+    black_occupancy: u64,
+    occupancy: u64,
+
+    en_passant_file: File,
+    can_en_passant: bool,
+
+    castling_rights: u8
 }
 
 
@@ -33,6 +39,11 @@ impl Default for Board {
             white_occupancy: 0,
             black_occupancy: 0,
             occupancy: 0,
+
+            en_passant_file: File::default(),
+            can_en_passant: false,
+
+            castling_rights: 0
         };
 
         board
@@ -69,6 +80,109 @@ impl Board{
             }
         }
 
+        self.update_occupancy();
+    }
+
+    pub fn color_orthogonal_bitboard(&self, color: Color) -> u64{
+        match color {
+            Color::White => self.bitboards[WhiteRook as usize].0 | self.bitboards[WhiteQueen as usize].0,
+            Color::Black => self.bitboards[BlackRook as usize].0 | self.bitboards[BlackQueen as usize].0,
+        }
+    }
+
+    pub fn color_diagonal_bitboard(&self, color: Color) -> u64{
+        match color {
+            Color::White => self.bitboards[WhiteBishop as usize].0 | self.bitboards[WhiteQueen as usize].0,
+            Color::Black => self.bitboards[BlackBishop as usize].0 | self.bitboards[BlackQueen as usize].0,
+        }
+    }
+
+    pub fn color_bitboard(&self, piece: BasePiece, color: Color) -> u64{
+        match color {
+            Color::White => self.bitboards[piece as usize].0,
+            Color::Black => self.bitboards[piece as usize + 6].0,
+        }
+    }
+
+    pub fn bitboard(&self, piece: Piece) -> u64{
+        self.bitboards[piece as usize].0
+    }
+
+    pub fn pieces_of(&self, piece: Piece) -> &[Square] {
+        &self.piece_lists[piece as usize].indexes()
+    }
+
+    pub fn color_pieces_of(&self, piece: BasePiece, color: Color) -> &[Square] {
+        match color {
+            Color::White => &self.piece_lists[piece as usize].indexes(),
+            Color::Black => &self.piece_lists[piece as usize + 6].indexes(),
+        }
+    }
+
+    pub fn piece_at(&self, square: Square) -> Piece{
+        self.piece_squares[square as usize]
+    }
+
+    pub fn king_square(&self, color: Color) -> Square{
+
+        match color {
+            Color::White => self.piece_lists[Piece::WhiteKing as usize].indexes()[0],
+            Color::Black => self.piece_lists[Piece::BlackKing as usize].indexes()[0],
+        }
+    }
+
+    pub fn color_occupancy(&self, color: Color) -> u64{
+        match color {
+            Color::White => self.white_occupancy,
+            Color::Black => self.black_occupancy,
+        }
+    }
+
+    pub fn all_occupancy(&self) -> u64{
+        self.occupancy
+    }
+
+    pub fn side_to_move(&self) -> Color{
+        self.side_to_move
+    }
+
+    pub fn en_passant_file(&self) -> Option<File>{
+        match self.can_en_passant {
+            true => Some(self.en_passant_file),
+            false => None,
+        }
+    }
+
+    pub fn has_short_castle_rights(&self, color: Color) -> bool{
+        match color {
+            Color::White => self.castling_rights & 0 == 1,
+            Color::Black => self.castling_rights & 2 == 1,
+        }
+    }
+
+    pub fn has_long_castle_rights(&self, color: Color) -> bool{
+        match color {
+            Color::White => self.castling_rights & 1 == 1,
+            Color::Black => self.castling_rights & 3 == 1,
+        }
+    }
+
+    fn update_occupancy(&mut self){
+        self.white_occupancy = 0;
+        self.black_occupancy = 0;
+        self.occupancy = 0;
+
+        for piece in Piece::iterator::<ITER_WHITE>(){
+            let bitboard =  self.bitboards[piece as usize].0;
+            self.white_occupancy |= bitboard;
+            self.occupancy |= bitboard;
+        }
+
+        for piece in Piece::iterator::<ITER_BLACK>(){
+            let bitboard =  self.bitboards[piece as usize].0;
+            self.black_occupancy |= bitboard;
+            self.occupancy |= bitboard;
+        }
     }
 
     fn add_piece(&mut self, piece: Piece, square: Square){
@@ -77,15 +191,15 @@ impl Board{
         self.piece_squares[square as usize] = piece;
     }
 
-    pub fn piece_at(&self, square: Square) -> Piece{
-        self.piece_squares[square as usize]
-    }
+
+    // fn remove_piece(&mut self, square: Square){}
 
 }
 
-const TOP_SECTION: &str    = "┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐";
-const MIDDLE_SECTION: &str = "├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤";
-const BOTTOM_SECTION: &str = "└─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘";
+const TOP_SECTION: &str    = "    ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐";
+const MIDDLE_SECTION: &str = "    ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤";
+const BOTTOM_SECTION: &str = "    └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘";
+const FILE_LABEL: &str =     "       a     b     c     d     e     f     g     h   ";
 const SIDE_BAR: &str = "│";
 
 
@@ -106,6 +220,7 @@ impl Display for Board {
                     pretty_print += "\n";
                 }
 
+                pretty_print += &*(" ".to_owned() + &*((i ^ 56) / 8 + 1).to_string() + "  ");
             }
 
             let square = Square::from((i ^ 56) as u8);
@@ -116,7 +231,7 @@ impl Display for Board {
 
         }
 
-        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION);
+        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL);
 
         write!(f, "{}", pretty_print)
 

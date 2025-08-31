@@ -58,11 +58,11 @@ impl PieceList {
 
     }
 
-    pub fn get_piece_count(&self) -> u8 {
+    pub fn count(&self) -> u8 {
         self.piece_count
     }
 
-    pub fn get_piece_indexes(&self) -> &[Square] {
+    pub fn indexes(&self) -> &[Square] {
         &self.piece_indexes[..(self.piece_count as usize)]
     }
 

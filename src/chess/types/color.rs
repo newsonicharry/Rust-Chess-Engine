@@ -18,6 +18,15 @@ impl Not for Color {
     }
 }
 
+impl Color {
+    pub fn is_white(self) -> bool {
+        match self {
+            Color::White => true,
+            Color::Black => false,
+        }
+    }
+}
+
 impl Display for Color {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let final_str = match self { 

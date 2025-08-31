@@ -1,5 +1,6 @@
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::square::Square;
+use std::fmt::Display;
 
 
 const SQUARE_MASK: u16 = 0b111111;
@@ -39,5 +40,19 @@ impl MovePly{
 
     pub fn flag(&self) -> MoveFlag{
         MoveFlag::from((self.packed_data >> FLAG_SHIFT) as u8)
+    }
+}
+
+impl Display for MovePly {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let from_file = self.from().file();
+        let from_rank = self.from().rank();
+
+        let to_file = self.to().file();
+        let to_rank = self.to().rank();
+
+        let final_str = from_file.to_string() + &*from_rank.to_string() + &*to_file.to_string() + &*to_rank.to_string();
+        write!(f, "{}", final_str)
+
     }
 }

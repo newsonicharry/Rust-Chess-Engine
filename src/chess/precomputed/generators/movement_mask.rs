@@ -11,14 +11,14 @@ pub struct MovementMasks{
     pub queen: [u64; NUM_SQUARES],
     pub king: [u64; NUM_SQUARES],
 
-    pub white_pawn_move: [u64; NUM_SQUARES],
-    pub black_pawn_move: [u64; NUM_SQUARES],
+    white_pawn_move: [u64; NUM_SQUARES],
+    black_pawn_move: [u64; NUM_SQUARES],
 
-    pub white_pawn_attacks: [u64; NUM_SQUARES],
-    pub black_pawn_attacks: [u64; NUM_SQUARES],
+    white_pawn_attacks: [u64; NUM_SQUARES],
+    black_pawn_attacks: [u64; NUM_SQUARES],
 
-    pub white_double_jump: [u64; NUM_SQUARES],
-    pub black_double_jump: [u64; NUM_SQUARES],
+    white_double_jump: [u64; NUM_SQUARES],
+    black_double_jump: [u64; NUM_SQUARES],
 
 }
 
@@ -75,20 +75,20 @@ impl MovementMasks {
     }
 
 
-    pub fn get_pawn_attacks(&self, color: Color, square: Square) -> u64{
+    pub fn pawn_attacks(&self, color: Color, square: Square) -> u64{
         match color {
             Color::White => self.white_pawn_attacks[square as usize],
             Color::Black => self.black_pawn_attacks[square as usize]
         }
     }
 
-    pub fn get_pawn_move(&self, color: Color, square: Square) -> u64{
+    pub fn pawn_move(&self, color: Color, square: Square) -> u64{
         match color {
             Color::White => self.white_pawn_move[square as usize],
             Color::Black => self.black_pawn_move[square as usize]
         }
     }
-    pub fn get_pawn_jump(&self, color: Color, square: Square) -> u64{
+    pub fn pawn_jump(&self, color: Color, square: Square) -> u64{
         match color {
             Color::White => self.white_double_jump[square as usize],
             Color::Black => self.black_double_jump[square as usize]

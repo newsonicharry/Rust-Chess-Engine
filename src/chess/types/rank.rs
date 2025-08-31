@@ -55,6 +55,13 @@ impl Rank {
         }
 
     }
+
+    pub fn can_pawn_promote(&self, color: Color) -> bool{
+        match color {
+            Color::White => { *self as u8 == 6 }
+            Color::Black => { *self as u8 == 1 }
+        }
+    }
 }
 
 

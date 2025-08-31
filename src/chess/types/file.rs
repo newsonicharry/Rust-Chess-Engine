@@ -13,6 +13,12 @@ impl From<u8> for File {
     }
 }
 
+impl Default for File{
+    fn default() -> Self {
+        File::A
+    }
+}
+
 impl File {
     pub fn add(&mut self, amount: u8){
         *self = File::from(*self as u8 + amount);
@@ -35,14 +41,14 @@ impl Display for File {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 
         let file_as_char = match self {
-            File::A => 'A',
-            File::B => 'B',
-            File::C => 'C',
-            File::D => 'D',
-            File::E => 'E',
-            File::F => 'F',
-            File::G => 'G',
-            File::H => 'H'
+            File::A => 'a',
+            File::B => 'b',
+            File::C => 'c',
+            File::D => 'd',
+            File::E => 'e',
+            File::F => 'f',
+            File::G => 'g',
+            File::H => 'h'
         };
 
         write!(f,"{}", file_as_char)

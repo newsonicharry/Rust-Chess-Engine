@@ -15,12 +15,6 @@ pub enum Piece {
     BlackRook,
     BlackQueen,
     BlackKing,
-    Pawn,
-    Knight,
-    Bishop,
-    Rook,
-    Queen,
-    King,
     NoPiece
 }
 
@@ -41,13 +35,6 @@ impl Display for Piece {
             Piece::BlackQueen => 'q',
             Piece::BlackKing => 'k',
 
-            Piece::Pawn => 'P',
-            Piece::Knight => 'N',
-            Piece::Bishop => 'B',
-            Piece::Rook => 'R',
-            Piece::Queen => 'Q',
-            Piece::King => 'K',
-
             Piece::NoPiece => ' '
         };
 
@@ -60,14 +47,62 @@ impl Display for Piece {
 const ALL_PIECES: [Piece; 12] = [Piece::WhitePawn, Piece::WhiteKnight, Piece::WhiteBishop, Piece::WhiteRook, Piece::WhiteQueen, Piece::WhiteKing, Piece::BlackPawn, Piece::BlackKnight, Piece::BlackBishop, Piece::BlackRook, Piece::BlackQueen, Piece::BlackKing];
 const WHITE_PIECES: [Piece; 6] = [Piece::WhitePawn, Piece::WhiteKnight, Piece::WhiteBishop, Piece::WhiteRook, Piece::WhiteQueen, Piece::WhiteKing];
 const BLACK_PIECES: [Piece; 6] = [Piece::BlackPawn, Piece::BlackKnight, Piece::BlackBishop, Piece::BlackRook, Piece::BlackQueen, Piece::BlackKing];
-const BASE_PIECES: [Piece; 6] = [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King];
 
 
-// impl Iterator
+pub const ITER_ALL: u8 = 0;
+pub const ITER_WHITE: u8 = 1;
+pub const ITER_BLACK: u8 = 2;
 
-// impl Pieces{
+impl Piece{
+    pub fn iterator<const ITER_TYPE: u8>() -> impl Iterator<Item = Piece> {
 
-// }
+        match ITER_TYPE {
+            ITER_ALL => ALL_PIECES.iter().copied(),
+            ITER_WHITE => WHITE_PIECES.iter().copied(),
+            ITER_BLACK => BLACK_PIECES.iter().copied(),
+            _ => unreachable!()
+        }
+    }
+}
+
+
+
+#[derive(Copy, Clone)]
+#[repr(u8)]
+pub enum BasePiece{
+    Pawn,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
+}
+
+
+const BASE_PIECES: [BasePiece; 6] = [BasePiece::Pawn, BasePiece::Knight, BasePiece::Bishop, BasePiece::Rook, BasePiece::Queen, BasePiece::King];
+
+
+impl BasePiece{
+    pub fn iterator<const ITER_TYPE: u8>() -> impl Iterator<Item = BasePiece> {
+        BASE_PIECES.iter().copied()
+    }
+}
+
+impl Display for BasePiece {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let char = match self{
+            BasePiece::Pawn => 'P',
+            BasePiece::Knight => 'N',
+            BasePiece::Bishop => 'B',
+            BasePiece::Rook => 'R',
+            BasePiece::Queen => 'Q',
+            BasePiece::King => 'K',
+        };
+
+        write!(f, "{}", char)
+
+    }
+}
 
 
 pub fn char_to_piece(piece: char) -> Option<Piece>{
