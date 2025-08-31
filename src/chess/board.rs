@@ -1,3 +1,4 @@
+use std::cmp::PartialEq;
 use crate::chess::bitboard::Bitboard;
 use crate::chess::consts::{NUM_PIECES, NUM_SQUARES};
 use crate::chess::piece_list::PieceList;
@@ -7,7 +8,14 @@ use crate::chess::types::piece::{char_to_piece, Piece, ITER_WHITE, ITER_BLACK, B
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
-use crate::chess::types::piece::Piece::{WhiteQueen, WhiteRook, BlackRook, BlackQueen, WhiteBishop, BlackBishop};
+use crate::chess::board_state::BoardState;
+use crate::chess::move_ply::MovePly;
+use crate::chess::types::move_flag::MoveFlag;
+use crate::chess::types::piece::Piece::{WhiteQueen, WhiteRook, BlackRook, BlackQueen, WhiteBishop, BlackBishop, NoPiece, WhitePawn, WhiteKing, BlackPawn, BlackKing};
+
+// if a piece on a certain square moves then the castling rights must change as well
+const SQUARE_MOVED_CASTLING: [u8; NUM_SQUARES] = [13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 7, 15, 15, 15, 3, 15, 15, 11];
+
 
 pub struct Board{
     bitboards: [Bitboard; NUM_PIECES],
@@ -22,8 +30,10 @@ pub struct Board{
 
     en_passant_file: File,
     can_en_passant: bool,
+    castling_rights: u8,
+    half_move_clock: u8,
 
-    castling_rights: u8
+    board_states: Vec<BoardState>,
 }
 
 
@@ -32,7 +42,7 @@ impl Default for Board {
         let board = Board{
             bitboards: [Bitboard::default(); NUM_PIECES],
             piece_lists: [PieceList::default(); NUM_PIECES],
-            piece_squares: [Piece::NoPiece; NUM_SQUARES],
+            piece_squares: [NoPiece; NUM_SQUARES],
 
             side_to_move: Color::White,
 
@@ -42,20 +52,22 @@ impl Default for Board {
 
             en_passant_file: File::default(),
             can_en_passant: false,
+            castling_rights: 0,
+            half_move_clock: 0,
 
-            castling_rights: 0
+            board_states: Vec::new(),
         };
 
         board
     }
 }
 
+
 impl Board{
 
     // fen string is considered accurate at this point
     // determining the fen strings accuracy is the job of the uci
     pub fn new(&mut self, fen: &str){
-
         let split_fen: Vec<&str> =  fen.split_whitespace().collect();
 
         let fen_sequence = split_fen.get(0).unwrap();
@@ -81,6 +93,7 @@ impl Board{
         }
 
         self.update_occupancy();
+        self.board_states.reserve(256);
     }
 
     pub fn color_orthogonal_bitboard(&self, color: Color) -> u64{
@@ -185,16 +198,199 @@ impl Board{
         }
     }
 
+
+    fn push_board_state(&mut self, played: MovePly, captured: Piece){
+        let board_state = BoardState{
+            played,
+            captured,
+            half_move_clock: 0,
+            castling_rights: self.castling_rights,
+            en_passant_file: self.en_passant_file,
+            can_en_passant: self.can_en_passant,
+        };
+
+        self.board_states.push(board_state);
+    }
+
     fn add_piece(&mut self, piece: Piece, square: Square){
         self.bitboards[piece as usize].add_piece(square);
         self.piece_lists[piece as usize].add_piece(square);
         self.piece_squares[square as usize] = piece;
     }
 
+    fn remove_piece(&mut self, piece: Piece, square: Square){
+        self.bitboards[piece as usize].remove_piece(square);
+        self.piece_lists[piece as usize].remove_piece(square);
+        self.piece_squares[square as usize] = piece;
+    }
 
-    // fn remove_piece(&mut self, square: Square){}
+    fn move_piece(&mut self, piece: Piece, from: Square, to: Square){
+        self.bitboards[piece as usize].move_piece(from, to);
+        self.piece_lists[piece as usize].move_piece(from, to);
+
+        self.piece_squares[from as usize] = NoPiece;
+        self.piece_squares[to as usize] = piece;
+    }
+
+    fn apply_quiet(&mut self, played: MovePly){
+        let from = played.from();
+        self.move_piece(self.piece_at(from), from, played.to())
+    }
+
+    fn apply_double_jump(&mut self, played: MovePly){
+        self.en_passant_file =  played.from().file();
+        self.apply_quiet(played);
+    }
+
+    fn apply_kingside_castle(&mut self){
+        match self.side_to_move {
+            Color::White => {
+                self.move_piece(WhiteKing, Square::E1, Square::G1);
+                self.move_piece(WhiteRook, Square::H1, Square::F1);
+            }
+            Color::Black => {
+                self.move_piece(BlackKing, Square::E8, Square::G8);
+                self.move_piece(BlackRook, Square::H8, Square::F8);
+            }
+        }
+    }
+    fn apply_queenside_castle(&mut self){
+        match self.side_to_move {
+            Color::White => {
+                self.move_piece(WhiteKing, Square::E1, Square::C1);
+                self.move_piece(WhiteRook, Square::A1, Square::D1);
+            }
+            Color::Black => {
+                self.move_piece(BlackKing, Square::E8, Square::C8);
+                self.move_piece(BlackRook, Square::A8, Square::D8);
+            }
+        }
+    }
+
+    fn apply_promotion(&mut self, played: MovePly){
+        self.remove_piece(self.piece_at(played.from()), played.from());
+        self.add_piece(played.flag().promotion_piece(self.side_to_move), played.to());
+
+    }
+
+    fn apply_en_passant(&mut self, played: MovePly){
+        self.apply_quiet(played);
+
+        match self.side_to_move{
+            Color::White => self.remove_piece(BlackPawn, Square::from(self.en_passant_file as u8 + 32)),
+            Color::Black => self.remove_piece(WhitePawn, Square::from(self.en_passant_file as u8 + 24)),
+        }
+    }
+
+
+    fn reverse_quiet(&mut self, played: MovePly){
+        let to = played.to();
+        self.move_piece(self.piece_at(to), to, played.from())
+    }
+
+    fn reverse_kingside_castle(&mut self){
+        match self.side_to_move {
+            Color::White => {
+                self.move_piece(WhiteKing, Square::G1, Square::E1);
+                self.move_piece(WhiteRook, Square::F1, Square::H1);
+            }
+            Color::Black => {
+                self.move_piece(BlackKing, Square::G8, Square::E8);
+                self.move_piece(BlackRook, Square::F8, Square::H8);
+            }
+        }
+    }
+    fn reverse_queenside_castle(&mut self){
+        match self.side_to_move {
+            Color::White => {
+                self.move_piece(WhiteKing, Square::C1, Square::E1);
+                self.move_piece(WhiteRook, Square::D1, Square::A1);
+            }
+            Color::Black => {
+                self.move_piece(BlackKing, Square::C8, Square::E8);
+                self.move_piece(BlackRook, Square::D8, Square::A8);
+            }
+        }
+    }
+
+    fn reverse_promotion(&mut self, played: MovePly){
+        self.remove_piece(self.piece_at(played.to()), played.to());
+
+        let original_pawn = match self.side_to_move {
+            Color::White => WhitePawn,
+            Color::Black => BlackPawn,
+        };
+
+        self.add_piece(original_pawn, played.from());
+    }
+
+    fn reverse_en_passant(&mut self, played: MovePly){
+        self.reverse_quiet(played);
+
+        match self.side_to_move{
+            Color::White => self.add_piece(BlackPawn, Square::from(self.en_passant_file as u8 + 32)),
+            Color::Black => self.add_piece(WhitePawn, Square::from(self.en_passant_file as u8 + 24)),
+        }
+    }
+
+
+    pub fn make_move(&mut self, played: MovePly){
+
+        let from = played.from();
+        let to = played.to();
+        let capture = self.piece_at(to);
+
+        self.push_board_state(played, capture);
+
+        if capture.is_piece() {
+            self.remove_piece(capture, to);
+        }
+
+        self.castling_rights &= SQUARE_MOVED_CASTLING[from as usize];
+        self.castling_rights &= SQUARE_MOVED_CASTLING[to as usize];
+
+        match played.flag() {
+            MoveFlag::None => self.apply_quiet(played),
+            MoveFlag::DoubleJump => self.apply_double_jump(played),
+            MoveFlag::CastleKingSide => self.apply_kingside_castle(),
+            MoveFlag::CastleQueenSide => self.apply_queenside_castle(),
+            MoveFlag::EnPassantCapture => self.apply_en_passant(played),
+            _ => self.apply_promotion(played),
+        }
+
+        self.side_to_move = !self.side_to_move;
+    }
+
+    pub fn undo_move(&mut self){
+        let last_board_state = unsafe { *self.board_states.last().unwrap_unchecked() };
+        let last_played = last_board_state.played;
+
+        self.castling_rights = last_board_state.castling_rights;
+        self.en_passant_file = last_board_state.en_passant_file;
+        self.can_en_passant = last_board_state.can_en_passant;
+        self.half_move_clock = last_board_state.half_move_clock;
+
+        match last_played.flag() {
+            MoveFlag::None | MoveFlag::DoubleJump => self.reverse_quiet(last_played),
+            MoveFlag::CastleKingSide => self.reverse_kingside_castle(),
+            MoveFlag::CastleQueenSide => self.reverse_queenside_castle(),
+            MoveFlag::EnPassantCapture => self.reverse_en_passant(last_played),
+            _ => self.reverse_promotion(last_played),
+        }
+
+        self.side_to_move = !self.side_to_move;
+
+        if last_board_state.captured.is_piece() {
+            self.add_piece(last_board_state.captured, last_played.to());
+        }
+
+        unsafe {self.board_states.pop().unwrap_unchecked(); }
+    }
+
+
 
 }
+
 
 const TOP_SECTION: &str    = "    ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐";
 const MIDDLE_SECTION: &str = "    ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤";

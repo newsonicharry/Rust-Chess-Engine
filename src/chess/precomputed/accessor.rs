@@ -13,24 +13,31 @@ static DIAGONAL_LOOKUP: SliderLookup<NUM_DIAGONAL_ENTRIES> = unsafe { std::mem::
 static ORTHOGONAL_LOOKUP: SliderLookup<NUM_ORTHOGONAL_ENTRIES> = unsafe { std::mem::transmute(*include_bytes!("./bins/orthogonal_lookup.bin")) };
 
 
+#[inline(always)]
 pub fn rook_lookup(square: Square, occupied: u64) -> u64{
     let magic = ORTHOGONAL_LOOKUP.magics[square as usize];
     let shift = ORTHOGONAL_LOOKUP.shifts[square as usize];
-    let blockers = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize]; & occupied;
+    let blockers = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
 
     let key = blockers.wrapping_mul(magic) >> shift;
-    ORTHOGONAL_LOOKUP.flat_table[key as usize]
+    let offset = ORTHOGONAL_LOOKUP.offsets[square as usize];
+
+    ORTHOGONAL_LOOKUP.flat_table[key as usize + offset]
 }
 
+#[inline(always)]
 pub fn bishop_lookup(square: Square, occupied: u64) -> u64{
     let magic = DIAGONAL_LOOKUP.magics[square as usize];
     let shift = DIAGONAL_LOOKUP.shifts[square as usize];
-    let blockers = DIAGONAL_LOOKUP.no_edge_masks[square as usize]; & occupied;
+    let blockers = DIAGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
 
     let key = blockers.wrapping_mul(magic) >> shift;
-    DIAGONAL_LOOKUP.flat_table[key as usize]
+    let offset = DIAGONAL_LOOKUP.offsets[square as usize];
+
+    DIAGONAL_LOOKUP.flat_table[key as usize + offset]
 }
 
+#[inline(always)]
 pub fn queen_lookup(square: Square, occupied: u64) -> u64{
     rook_lookup(square, occupied) | bishop_lookup(square, occupied)
 }

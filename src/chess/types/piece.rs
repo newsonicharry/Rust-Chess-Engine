@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use crate::chess::types::piece::Piece::NoPiece;
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -63,6 +64,10 @@ impl Piece{
             _ => unreachable!()
         }
     }
+    
+    pub fn is_piece(&self) -> bool {
+        *self as u8 != NoPiece as u8
+    } 
 }
 
 

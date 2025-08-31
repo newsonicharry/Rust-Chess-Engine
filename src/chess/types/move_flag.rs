@@ -23,12 +23,12 @@ impl From<u8> for MoveFlag{
 }
 
 impl MoveFlag {
-    pub fn promotion_piece<const IS_BASE_PIECE: bool>(&self, color: Color) -> Piece{
+    pub fn promotion_piece(&self, color: Color) -> Piece{
         // the binary representation of white pieces and move flag promotion pieces are the same
         // so to convert to black pieces one can simply add 6
-        if IS_BASE_PIECE {
-            return unsafe{ mem::transmute(*self as u8 + 12) };
-        }
+        // if IS_BASE_PIECE {
+        //     return unsafe{ mem::transmute(*self as u8 + 12) };
+        // }
 
         match color {
             Color::White => unsafe{ mem::transmute(*self as u8) },
