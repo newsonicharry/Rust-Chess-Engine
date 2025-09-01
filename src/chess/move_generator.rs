@@ -30,9 +30,9 @@ impl MoveGenerator {
 
         Self::update_king_moves(board, move_list, pieces_checking);
     }
-    
-    
-    
+
+
+
     fn get_attacks(board: &Board, side_to_move: Color) -> u64{
         let mut attack_mask: u64 = 0;
     
@@ -65,8 +65,8 @@ impl MoveGenerator {
         attack_mask
     
     }
-    
-    
+
+
     fn get_check_data(board: &Board) -> (u64, u64){
     
     
@@ -99,8 +99,8 @@ impl MoveGenerator {
         (all_checks, blockable_squares)
     
     }
-    
-    
+
+
     fn update_pawn_moves(board: &Board, move_list: &mut MoveList, blockable_squares: u64, pinned_pieces_mask: u64, pin_ray_mask: &[u64; 64]){
 
 
@@ -261,7 +261,7 @@ impl MoveGenerator {
         }
 
     }
-    
+
     
     
     fn get_pins(board: &Board, pin_ray_mask: &mut [u64; 64]) -> u64{

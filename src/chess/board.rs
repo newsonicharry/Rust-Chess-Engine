@@ -16,7 +16,6 @@ use crate::chess::types::piece::Piece::{WhiteQueen, WhiteRook, BlackRook, BlackQ
 // if a piece on a certain square moves then the castling rights must change as well
 const SQUARE_MOVED_CASTLING: [u8; NUM_SQUARES] = [13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 7, 15, 15, 15, 3, 15, 15, 11];
 
-
 pub struct Board{
     bitboards: [Bitboard; NUM_PIECES],
     piece_lists: [PieceList; NUM_PIECES],
@@ -221,19 +220,19 @@ impl Board{
 
         self.board_states.push(board_state);
     }
-
+    #[inline(always)]
     fn add_piece(&mut self, piece: Piece, square: Square){
         self.bitboards[piece as usize].add_piece(square);
         self.piece_lists[piece as usize].add_piece(square);
         self.piece_squares[square as usize] = piece;
     }
-
+    #[inline(always)]
     fn remove_piece(&mut self, piece: Piece, square: Square){
         self.bitboards[piece as usize].remove_piece(square);
         self.piece_lists[piece as usize].remove_piece(square);
         self.piece_squares[square as usize] = NoPiece;
     }
-
+    #[inline(always)]
     fn move_piece(&mut self, piece: Piece, from: Square, to: Square){
         self.bitboards[piece as usize].move_piece(from, to);
         self.piece_lists[piece as usize].move_piece(from, to);
@@ -244,18 +243,15 @@ impl Board{
         // self.remove_piece(piece, from);
         // self.add_piece(piece, to);
     }
-
     fn apply_quiet(&mut self, played: MovePly){
         let from = played.from();
         self.move_piece(self.piece_at(from), from, played.to())
     }
-
     fn apply_double_jump(&mut self, played: MovePly){
         self.en_passant_file =  played.from().file();
         self.can_en_passant = true;
         self.apply_quiet(played);
     }
-
     fn apply_kingside_castle(&mut self){
         match self.side_to_move {
             Color::White => {
@@ -295,7 +291,6 @@ impl Board{
             Color::Black => self.remove_piece(WhitePawn, Square::from(self.en_passant_file as u8 + 24)),
         }
     }
-
 
     fn reverse_quiet(&mut self, played: MovePly){
         let to = played.to();
