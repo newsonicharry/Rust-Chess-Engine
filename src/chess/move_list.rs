@@ -13,7 +13,7 @@ pub struct MoveList{
 impl Default for MoveList {
     fn default() -> Self {
         MoveList{
-            moves: [MovePly::default(); 256],
+            moves: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
             move_count: 0,
         }
     }

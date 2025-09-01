@@ -15,26 +15,37 @@ static ORTHOGONAL_LOOKUP: SliderLookup<NUM_ORTHOGONAL_ENTRIES> = unsafe { std::m
 
 #[inline(always)]
 pub fn rook_lookup(square: Square, occupied: u64) -> u64{
-    let magic = ORTHOGONAL_LOOKUP.magics[square as usize];
-    let shift = ORTHOGONAL_LOOKUP.shifts[square as usize];
-    let blockers = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
 
-    let key = blockers.wrapping_mul(magic) >> shift;
-    let offset = ORTHOGONAL_LOOKUP.offsets[square as usize];
+    let mask = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize];
+    let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
+    unsafe { *ORTHOGONAL_LOOKUP.flat_table.get_unchecked(ORTHOGONAL_LOOKUP.offsets[square as usize] + idx) }
 
-    ORTHOGONAL_LOOKUP.flat_table[key as usize + offset]
+
+    // let magic = ORTHOGONAL_LOOKUP.magics[square as usize];
+    // let shift = ORTHOGONAL_LOOKUP.shifts[square as usize];
+    // let blockers = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
+    //
+    // let key = blockers.wrapping_mul(magic) >> shift;
+    // let offset = ORTHOGONAL_LOOKUP.offsets[square as usize];
+    //
+    // ORTHOGONAL_LOOKUP.flat_table[key as usize + offset]
 }
 
 #[inline(always)]
 pub fn bishop_lookup(square: Square, occupied: u64) -> u64{
-    let magic = DIAGONAL_LOOKUP.magics[square as usize];
-    let shift = DIAGONAL_LOOKUP.shifts[square as usize];
-    let blockers = DIAGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
+    let mask = DIAGONAL_LOOKUP.no_edge_masks[square as usize];
+    let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
+    unsafe { *DIAGONAL_LOOKUP.flat_table.get_unchecked(DIAGONAL_LOOKUP.offsets[square as usize] + idx) }
 
-    let key = blockers.wrapping_mul(magic) >> shift;
-    let offset = DIAGONAL_LOOKUP.offsets[square as usize];
 
-    DIAGONAL_LOOKUP.flat_table[key as usize + offset]
+    // let magic = DIAGONAL_LOOKUP.magics[square as usize];
+    // let shift = DIAGONAL_LOOKUP.shifts[square as usize];
+    // let blockers = DIAGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
+    //
+    // let key = blockers.wrapping_mul(magic) >> shift;
+    // let offset = DIAGONAL_LOOKUP.offsets[square as usize];
+    //
+    // DIAGONAL_LOOKUP.flat_table[key as usize + offset]
 }
 
 #[inline(always)]

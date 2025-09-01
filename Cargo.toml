@@ -13,6 +13,7 @@ rand = "0.7.2"
 
 [profile.release]
 opt-level = 3
+lto = "thin"
 rustflags = [
     "-C", "link-arg=-Wl,--stack,8000000",
     "-C", "target-cpu=native"

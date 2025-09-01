@@ -87,8 +87,9 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
             for blocker in blockers {
                 let magic = self.magics[piece_index];
                 let shift = self.shifts[piece_index];
+                // let key = blocker.wrapping_mul(magic) >> shift;
+                let key = unsafe { std::arch::x86_64::_pext_u64(blocker, self.no_edge_masks[piece_index]) };
 
-                let key = blocker.wrapping_mul(magic) >> shift;
                 let valid_moves =  self.get_moves_from_blockers(square, &slider_type, blocker);
 
                 self.flat_table[key as usize + last_offset] = valid_moves;

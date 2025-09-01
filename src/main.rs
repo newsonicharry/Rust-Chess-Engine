@@ -2,14 +2,28 @@ use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
 use std::time::Instant;
+use crate::chess::precomputed::data_dump::dump_bins;
+use crate::chess::types::color::Color::White;
+use crate::engine::eval::nnue::NNUE;
 
 mod chess;
 mod general;
+mod engine;
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 fn main() {
-    perft(START_POS, 7)
+    // dump_bins();
+
+    let mut board = Board::default();
+    board.new(START_POS);
+
+    let mut nnue = NNUE::default();
+    nnue.new(&board);
+
+    println!("{}", nnue.evaluate(White));
+
+    // perft(START_POS, 7)
 }
 
 

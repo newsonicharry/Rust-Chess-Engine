@@ -3,7 +3,6 @@ use crate::chess::types::rank::Rank;
 use std::fmt::Display;
 use std::mem;
 use std::ops::Rem;
-use crate::chess::consts::NUM_SQUARES;
 
 #[repr(u8)]
 #[derive(Clone,Copy)]

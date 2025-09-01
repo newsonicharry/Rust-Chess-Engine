@@ -22,6 +22,13 @@ impl From<u8> for MoveFlag{
     }
 }
 
+impl PartialEq for MoveFlag{
+    fn eq(&self, other: &MoveFlag) -> bool{
+        *other as u8 == *self as u8
+    }
+}
+
+
 impl MoveFlag {
     pub fn promotion_piece(&self, color: Color) -> Piece{
         // the binary representation of white pieces and move flag promotion pieces are the same

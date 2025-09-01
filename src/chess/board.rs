@@ -1,17 +1,16 @@
-use std::cmp::PartialEq;
 use crate::chess::bitboard::Bitboard;
-use crate::chess::consts::{NUM_PIECES, NUM_SQUARES};
+use crate::chess::board_state::BoardState;
+use crate::chess::consts::{MAX_MOVES, NUM_PIECES, NUM_SQUARES};
+use crate::chess::move_ply::MovePly;
 use crate::chess::piece_list::PieceList;
 use crate::chess::types::color::Color;
 use crate::chess::types::file::File;
-use crate::chess::types::piece::{char_to_piece, Piece, ITER_WHITE, ITER_BLACK, BasePiece};
+use crate::chess::types::move_flag::MoveFlag;
+use crate::chess::types::piece::Piece::{BlackBishop, BlackKing, BlackPawn, BlackQueen, BlackRook, NoPiece, WhiteBishop, WhiteKing, WhitePawn, WhiteQueen, WhiteRook};
+use crate::chess::types::piece::{char_to_piece, BasePiece, Piece, ITER_BLACK, ITER_WHITE};
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
-use crate::chess::board_state::BoardState;
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::piece::Piece::{WhiteQueen, WhiteRook, BlackRook, BlackQueen, WhiteBishop, BlackBishop, NoPiece, WhitePawn, WhiteKing, BlackPawn, BlackKing};
 
 // if a piece on a certain square moves then the castling rights must change as well
 const SQUARE_MOVED_CASTLING: [u8; NUM_SQUARES] = [13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 7, 15, 15, 15, 3, 15, 15, 11];
@@ -31,8 +30,10 @@ pub struct Board{
     can_en_passant: bool,
     castling_rights: u8,
     half_move_clock: u8,
+    zobrist: u64,
 
-    board_states: Vec<BoardState>,
+    board_states: [BoardState; MAX_MOVES],
+    cur_board_state: usize
 }
 
 
@@ -53,8 +54,10 @@ impl Default for Board {
             can_en_passant: false,
             castling_rights: 0,
             half_move_clock: 0,
+            zobrist: 0,
 
-            board_states: Vec::new(),
+            board_states: [BoardState::default(); MAX_MOVES],
+            cur_board_state: 0,
         };
 
         board
@@ -100,9 +103,7 @@ impl Board{
         if castling_rights_str.contains("q") { self.castling_rights |= 0b1000 }
 
 
-
         self.update_occupancy();
-        self.board_states.reserve(256);
     }
 
     pub fn color_orthogonal_bitboard(&self, color: Color) -> u64{
@@ -148,8 +149,8 @@ impl Board{
     pub fn king_square(&self, color: Color) -> Square{
 
         match color {
-            Color::White => self.piece_lists[Piece::WhiteKing as usize].indexes()[0],
-            Color::Black => self.piece_lists[Piece::BlackKing as usize].indexes()[0],
+            Color::White => self.piece_lists[WhiteKing as usize].indexes()[0],
+            Color::Black => self.piece_lists[BlackKing as usize].indexes()[0],
         }
     }
 
@@ -209,16 +210,14 @@ impl Board{
 
 
     fn push_board_state(&mut self, played: MovePly, captured: Piece){
-        let board_state = BoardState{
-            played,
-            captured,
-            half_move_clock: 0,
-            castling_rights: self.castling_rights,
-            en_passant_file: self.en_passant_file,
-            can_en_passant: self.can_en_passant,
-        };
+        self.board_states[self.cur_board_state].played = played;
+        self.board_states[self.cur_board_state].captured = captured;
+        self.board_states[self.cur_board_state].half_move_clock = self.half_move_clock;
+        self.board_states[self.cur_board_state].castling_rights = self.castling_rights;
+        self.board_states[self.cur_board_state].en_passant_file = self.en_passant_file;
+        self.board_states[self.cur_board_state].can_en_passant = self.can_en_passant;
 
-        self.board_states.push(board_state);
+        self.cur_board_state += 1;
     }
     #[inline(always)]
     fn add_piece(&mut self, piece: Piece, square: Square){
@@ -239,9 +238,6 @@ impl Board{
 
         self.piece_squares[from as usize] = NoPiece;
         self.piece_squares[to as usize] = piece;
-
-        // self.remove_piece(piece, from);
-        // self.add_piece(piece, to);
     }
     fn apply_quiet(&mut self, played: MovePly){
         let from = played.from();
@@ -373,7 +369,7 @@ impl Board{
     }
 
     pub fn undo_move(&mut self){
-        let last_board_state = unsafe { *self.board_states.last().unwrap_unchecked() };
+        let last_board_state = unsafe { self.board_states[self.cur_board_state-1] };
         let last_played = last_board_state.played;
 
         self.castling_rights = last_board_state.castling_rights;
@@ -397,7 +393,7 @@ impl Board{
             self.add_piece(last_board_state.captured, last_played.to());
         }
 
-        unsafe {self.board_states.pop().unwrap_unchecked(); }
+        self.cur_board_state -= 1;
         self.update_occupancy();
     }
 
@@ -442,10 +438,6 @@ impl Display for Board {
         }
 
         pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL + "\n");
-
-        let side_to_move = "Side to move: ".to_owned() + &*self.side_to_move.to_string() + "\n";
-        let en_passant_data = "castling: ".to_owned() + &*self.castling_rights.to_string() + "\n";
-        pretty_print += en_passant_data.as_str();
 
         write!(f, "{}", pretty_print)
 

@@ -3,6 +3,8 @@ pub const NUM_PIECES: usize = 12;
 pub const NUM_FILES: usize = 8;
 pub const NUM_RANKS: usize = 8;
 
+pub const MAX_MOVES: usize = 1024;
+
 pub const KNIGHT_DIRECTIONS: [(i8,i8); 8] = [(-2, 1), (-1, 2), (1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1)];
 pub const BISHOP_DIRECTIONS: [(i8,i8); 4] = [(1, 1), (-1, 1), (-1, -1), (1, -1)];
 pub const ROOK_DIRECTIONS: [(i8,i8); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
