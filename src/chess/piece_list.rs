@@ -47,7 +47,7 @@ impl PieceList {
         let piece_index = self.map[square as usize];
 
         self.piece_indexes[piece_index as usize] = self.piece_indexes[(self.piece_count-1) as usize];
-        self.map[self.piece_indexes[piece_index  as usize] as usize] = piece_index;
+        self.map[self.piece_indexes[piece_index as usize] as usize] = piece_index;
         self.piece_count -= 1;
     }
 
@@ -57,6 +57,8 @@ impl PieceList {
         self.map[to_square as usize] = piece_index;
 
     }
+
+
 
     pub fn count(&self) -> u8 {
         self.piece_count

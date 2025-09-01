@@ -1,7 +1,8 @@
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
-
+use crate::chess::types::color::Color;
+use crate::chess::types::color::Color::Black;
 
 const SQUARE_MASK: u16 = 0b111111;
 const TO_SHIFT: u8 = 6;
@@ -51,7 +52,15 @@ impl Display for MovePly {
         let to_file = self.to().file();
         let to_rank = self.to().rank();
 
-        let final_str = from_file.to_string() + &*from_rank.to_string() + &*to_file.to_string() + &*to_rank.to_string();
+
+        let mut promotion_piece = "".to_owned();
+
+        let flag = self.flag();
+        if flag.is_promotion() {
+            promotion_piece = flag.promotion_piece(Black).to_string();
+        }
+
+        let final_str = from_file.to_string() + &*from_rank.to_string() + &*to_file.to_string() + &*to_rank.to_string() + &*promotion_piece;
         write!(f, "{}", final_str)
 
     }

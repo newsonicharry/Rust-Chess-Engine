@@ -1,3 +1,4 @@
+use crate::chess::bitboard::Bitboard;
 use crate::chess::board::Board;
 use crate::chess::consts::NUM_SQUARES;
 use crate::chess::move_list::MoveList;
@@ -6,6 +7,7 @@ use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::piece::BasePiece::{Pawn, Knight, Bishop, Rook, Queen, King};
 use crate::chess::types::square::Square;
+use crate::chess::types::square::Square::{D1, D7, D8};
 use crate::general::bits;
 
 pub struct MoveGenerator{}
@@ -18,7 +20,8 @@ impl MoveGenerator {
         
         let mut pin_ray_mask: [u64; NUM_SQUARES] = [0; NUM_SQUARES];
         let pinned_pieces_mask = Self::get_pins(board, &mut pin_ray_mask);
-        
+
+
         Self::update_pawn_moves  (board, move_list, blockable_squares, pinned_pieces_mask, &pin_ray_mask);
         Self::update_knight_moves(board, move_list, blockable_squares, pinned_pieces_mask);
         Self::update_bishop_moves(board, move_list, blockable_squares, pinned_pieces_mask, &pin_ray_mask);
@@ -119,27 +122,30 @@ impl MoveGenerator {
             }
 
             // en passant
-            if let Some(en_passant_file) = board.en_passant_file() && (pinned_pieces_mask & pawn_mask == 0) {
+            if let Some(en_passant_file) = board.en_passant_file() {
+                if pinned_pieces_mask & pawn_mask == 0 {
 
-                let en_passant_attack_mask = if board.side_to_move().is_white() {1 << (en_passant_file as u8 + 40)} else { 1<< (en_passant_file as u8 +16) };
-                let attack_square_mask = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square) & en_passant_attack_mask;
+                    let en_passant_attack_mask = if board.side_to_move().is_white() {1 << (en_passant_file as u8 + 40)} else { 1<< (en_passant_file as u8 +16) };
+                    let attack_square_mask = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square) & en_passant_attack_mask;
 
-                // en passant discovered check
-                if attack_square_mask != 0 {
-                    let enemy_pawn_mask: u64 = if board.side_to_move().is_white() {1 << (en_passant_file as u8 + 32)} else { 1<< (en_passant_file as u8 +24) };
-                    let new_blockers = board.all_occupancy() & (!enemy_pawn_mask) & (!pawn_mask) | attack_square_mask;
+                    // en passant discovered check
+                    if attack_square_mask != 0 {
+                        let enemy_pawn_mask: u64 = if board.side_to_move().is_white() {1 << (en_passant_file as u8 + 32)} else { 1<< (en_passant_file as u8 +24) };
+                        let new_blockers = board.all_occupancy() & (!enemy_pawn_mask) & (!pawn_mask) | attack_square_mask;
 
-                    let enemy_orthogonal = board.color_orthogonal_bitboard(!board.side_to_move());
-                    let enemy_diagonal = board.color_diagonal_bitboard(!board.side_to_move());
+                        let enemy_orthogonal = board.color_orthogonal_bitboard(!board.side_to_move());
+                        let enemy_diagonal = board.color_diagonal_bitboard(!board.side_to_move());
 
-                    if rook_lookup(king_square, new_blockers) & enemy_orthogonal == 0{
-                        if bishop_lookup(king_square, new_blockers) & enemy_diagonal == 0{
-                            move_list.add_moves(attack_square_mask, square, MoveFlag::EnPassantCapture);
+                        if rook_lookup(king_square, new_blockers) & enemy_orthogonal == 0{
+                            if bishop_lookup(king_square, new_blockers) & enemy_diagonal == 0{
+                                move_list.add_moves(attack_square_mask, square, MoveFlag::EnPassantCapture);
 
+                            }
                         }
-                    }
 
+                    }
                 }
+
             }
 
             // promotion
@@ -268,11 +274,16 @@ impl MoveGenerator {
         let enemy_orthogonal = board.color_orthogonal_bitboard(!board.side_to_move());
         let enemy_diagonal = board.color_diagonal_bitboard(!board.side_to_move());
 
+        // println!("{}", Bitboard::from(enemy_orthogonal));
+        // println!("{}", Bitboard::from(MOVEMENT_MASKS.rook[friendly_king_square as usize]));
+
         let possible_orthogonally_pinned: u64 = MOVEMENT_MASKS.rook[friendly_king_square as usize] & enemy_orthogonal;
         let possible_diagonally_pinned: u64 = MOVEMENT_MASKS.bishop[friendly_king_square as usize] & enemy_diagonal;
-    
+
         let mut possible_pinners = possible_orthogonally_pinned | possible_diagonally_pinned;
-    
+
+
+
         let mut pinned_pieces_mask: u64 = 0;
     
         while possible_pinners != 0{

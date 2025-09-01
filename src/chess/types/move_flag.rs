@@ -36,4 +36,21 @@ impl MoveFlag {
         }
 
     }
+
+    pub fn is_promotion(&self) -> bool{
+        match self {
+            MoveFlag::PromoteToKnight => true,
+            MoveFlag::PromoteToBishop => true,
+            MoveFlag::PromoteToRook => true,
+            MoveFlag::PromoteToQueen => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_en_passant_capture(&self) -> bool{
+        match self {
+            MoveFlag::EnPassantCapture => true,
+            _ => false,
+        }
+    }
 }

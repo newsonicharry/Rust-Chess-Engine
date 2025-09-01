@@ -91,6 +91,16 @@ impl Board{
                 self.add_piece(piece, cur_square);
             }
         }
+        let side_to_move_str = split_fen.get(1).unwrap();
+        if side_to_move_str.contains("b") { self.side_to_move = Color::Black; }
+
+        let castling_rights_str = split_fen.get(2).unwrap();
+        if castling_rights_str.contains("K") { self.castling_rights |= 0b0001 }
+        if castling_rights_str.contains("Q") { self.castling_rights |= 0b0010 }
+        if castling_rights_str.contains("k") { self.castling_rights |= 0b0100 }
+        if castling_rights_str.contains("q") { self.castling_rights |= 0b1000 }
+
+
 
         self.update_occupancy();
         self.board_states.reserve(256);
@@ -168,15 +178,15 @@ impl Board{
 
     pub fn has_short_castle_rights(&self, color: Color) -> bool{
         match color {
-            Color::White => self.castling_rights & 0 == 1,
-            Color::Black => self.castling_rights & 2 == 1,
+            Color::White => self.castling_rights & 0b0001 != 0,
+            Color::Black => self.castling_rights & 0b0100 != 0,
         }
     }
 
     pub fn has_long_castle_rights(&self, color: Color) -> bool{
         match color {
-            Color::White => self.castling_rights & 1 == 1,
-            Color::Black => self.castling_rights & 3 == 1,
+            Color::White => self.castling_rights & 0b0010 != 0,
+            Color::Black => self.castling_rights & 0b1000 != 0,
         }
     }
 
@@ -221,7 +231,7 @@ impl Board{
     fn remove_piece(&mut self, piece: Piece, square: Square){
         self.bitboards[piece as usize].remove_piece(square);
         self.piece_lists[piece as usize].remove_piece(square);
-        self.piece_squares[square as usize] = piece;
+        self.piece_squares[square as usize] = NoPiece;
     }
 
     fn move_piece(&mut self, piece: Piece, from: Square, to: Square){
@@ -230,6 +240,9 @@ impl Board{
 
         self.piece_squares[from as usize] = NoPiece;
         self.piece_squares[to as usize] = piece;
+
+        // self.remove_piece(piece, from);
+        // self.add_piece(piece, to);
     }
 
     fn apply_quiet(&mut self, played: MovePly){
@@ -239,6 +252,7 @@ impl Board{
 
     fn apply_double_jump(&mut self, played: MovePly){
         self.en_passant_file =  played.from().file();
+        self.can_en_passant = true;
         self.apply_quiet(played);
     }
 
@@ -342,6 +356,7 @@ impl Board{
 
         self.push_board_state(played, capture);
 
+        self.can_en_passant = false;
         if capture.is_piece() {
             self.remove_piece(capture, to);
         }
@@ -359,6 +374,7 @@ impl Board{
         }
 
         self.side_to_move = !self.side_to_move;
+        self.update_occupancy()
     }
 
     pub fn undo_move(&mut self){
@@ -370,6 +386,9 @@ impl Board{
         self.can_en_passant = last_board_state.can_en_passant;
         self.half_move_clock = last_board_state.half_move_clock;
 
+        self.side_to_move = !self.side_to_move;
+
+
         match last_played.flag() {
             MoveFlag::None | MoveFlag::DoubleJump => self.reverse_quiet(last_played),
             MoveFlag::CastleKingSide => self.reverse_kingside_castle(),
@@ -378,13 +397,13 @@ impl Board{
             _ => self.reverse_promotion(last_played),
         }
 
-        self.side_to_move = !self.side_to_move;
 
-        if last_board_state.captured.is_piece() {
+        if last_board_state.captured.is_piece() && !last_played.flag().is_en_passant_capture(){
             self.add_piece(last_board_state.captured, last_played.to());
         }
 
         unsafe {self.board_states.pop().unwrap_unchecked(); }
+        self.update_occupancy();
     }
 
 
@@ -427,7 +446,11 @@ impl Display for Board {
 
         }
 
-        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL);
+        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL + "\n");
+
+        let side_to_move = "Side to move: ".to_owned() + &*self.side_to_move.to_string() + "\n";
+        let en_passant_data = "castling: ".to_owned() + &*self.castling_rights.to_string() + "\n";
+        pretty_print += en_passant_data.as_str();
 
         write!(f, "{}", pretty_print)
 

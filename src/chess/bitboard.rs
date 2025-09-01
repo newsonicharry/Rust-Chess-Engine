@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::{BitAnd, BitOr, Not, BitAndAssign, BitOrAssign};
+use crate::chess::board::Board;
+use crate::chess::consts::NUM_SQUARES;
 use crate::chess::types::square::Square;
 
 #[derive(Copy)]
@@ -9,6 +11,12 @@ pub struct Bitboard(pub u64);
 impl Default for Bitboard {
     fn default() -> Self {
         Bitboard(0)
+    }
+}
+
+impl From<u64> for Bitboard {
+    fn from(bits: u64) -> Self {
+        Bitboard(bits)
     }
 }
 
@@ -50,8 +58,51 @@ impl BitAndAssign<u64> for Bitboard {
 }
 
 
+
+const TOP_SECTION: &str    = "    ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐";
+const MIDDLE_SECTION: &str = "    ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤";
+const BOTTOM_SECTION: &str = "    └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘";
+const FILE_LABEL: &str =     "       a     b     c     d     e     f     g     h   ";
+const SIDE_BAR: &str = "│";
+
+
+
+
 impl Display for Bitboard {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
+
+
+        let mut pretty_print = TOP_SECTION.to_string();
+
+        for i in 0..NUM_SQUARES {
+
+            if i % 8 == 0 {
+
+                if i != 0 {
+                    pretty_print += &*(SIDE_BAR.to_owned() + "\n" + MIDDLE_SECTION + "\n");
+                }
+                else {
+                    pretty_print += "\n";
+                }
+
+                pretty_print += &*(" ".to_owned() + &*((i ^ 56) / 8 + 1).to_string() + "  ");
+            }
+
+            let square = Square::from((i ^ 56) as u8);
+            let bit_on = self.0 & square.mask() != 0;
+
+            let item = match bit_on {
+                true => '-',
+                false => ' ',
+            };
+
+            pretty_print += &*(SIDE_BAR.to_owned() + "  " + &*item.to_string() + "  ");
+
+        }
+
+        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL + "\n");
+
+        write!(f, "{}", pretty_print)
+
     }
 }

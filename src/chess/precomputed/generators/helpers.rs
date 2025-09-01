@@ -51,12 +51,16 @@ pub fn create_dynamic_mask<const EDGE: bool>(directions: &[(i8, i8)], square: Sq
             let new_x = x_cord + x_dir;
             let new_y = y_cord + y_dir;
 
-            if (new_x >  7 || new_x < 0) || (new_y >  7 || new_y < 0) {break;}
-            
-            if EDGE == NO_EDGE && (x_dir != 0 && (new_x > 6 || new_x < 1)) || (y_dir != 0 && (new_y > 6 || new_y < 1)) { 
+            if (new_x >  7 || new_x < 0) || (new_y > 7 || new_y < 0) {
                 break;
             }
-            
+
+            if (EDGE == NO_EDGE) && ((x_dir != 0 && (new_x > 6 || new_x < 1)) || (y_dir != 0 && (new_y > 6 || new_y < 1))) {
+
+                break;
+            }
+
+
             let file = File::from(new_x as u8);
             let rank = Rank::from(new_y as u8);
             

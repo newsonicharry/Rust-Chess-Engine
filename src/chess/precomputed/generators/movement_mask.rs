@@ -1,8 +1,8 @@
 use crate::chess::consts;
+use crate::chess::consts::NUM_SQUARES;
 use crate::chess::precomputed::generators::helpers::{create_dynamic_mask, create_static_mask, INCLUDE_EDGE};
 use crate::chess::types::color::Color;
 use crate::chess::types::square::Square;
-use crate::chess::consts::NUM_SQUARES;
 
 pub struct MovementMasks{
     pub knight: [u64; NUM_SQUARES],

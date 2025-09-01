@@ -33,15 +33,20 @@ impl MoveList{
         }
     }
 
-    pub fn add_promotion_moves(&mut self, to_mask: u64, from: Square){
-        let to_square = Square::from(bits::next(to_mask));
+    pub fn add_promotion_moves(&mut self, mut to_mask: u64, from: Square){
+        while to_mask != 0{
 
-        self.moves[self.move_count] = MovePly::new(from, to_square, MoveFlag::PromoteToKnight);
-        self.moves[self.move_count+1] = MovePly::new(from, to_square, MoveFlag::PromoteToBishop);
-        self.moves[self.move_count+2] = MovePly::new(from, to_square, MoveFlag::PromoteToRook);
-        self.moves[self.move_count+3] = MovePly::new(from, to_square, MoveFlag::PromoteToQueen);
+            let to_square = Square::from(bits::next(to_mask));
 
-        self.move_count += 4;
+            self.moves[self.move_count] = MovePly::new(from, to_square, MoveFlag::PromoteToKnight);
+            self.moves[self.move_count+1] = MovePly::new(from, to_square, MoveFlag::PromoteToBishop);
+            self.moves[self.move_count+2] = MovePly::new(from, to_square, MoveFlag::PromoteToRook);
+            self.moves[self.move_count+3] = MovePly::new(from, to_square, MoveFlag::PromoteToQueen);
+
+            self.move_count += 4;
+
+            to_mask = bits::pop(to_mask);
+        }
     }
 
     pub fn reset(&mut self){
