@@ -74,6 +74,7 @@ impl Zobrist{
     }
 
 
+    #[inline(always)]
     pub fn square_zobrist(&self, piece: Piece, square: Square) -> u64{
         self.squares[piece as usize][square as usize]
     }
@@ -91,11 +92,13 @@ impl Zobrist{
             Black => self.castling_rights[BLACK_SHORT_CASTLE],
         }
     }
-    
+
+    #[inline(always)]
     pub fn pawn_jump(&self, file: File) -> u64{
         self.double_jump[file as usize]
     }
-    
+
+    #[inline(always)]
     pub fn side_to_move(&self) -> u64{
         self.side_to_move
     }

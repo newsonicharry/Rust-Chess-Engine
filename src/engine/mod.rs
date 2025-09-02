@@ -3,6 +3,6 @@ mod search;
 mod thread;
 mod search_limits;
 mod info;
-mod transposition;
+pub mod transposition;
 mod arbiter;
 mod types;

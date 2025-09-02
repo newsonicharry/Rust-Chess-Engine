@@ -14,8 +14,9 @@ pub struct MoveGenerator{}
 
 impl MoveGenerator {
 
-    pub fn generate(board: &Board, move_list: &mut MoveList) {
+    pub fn generate(board: &mut Board, move_list: &mut MoveList) {
 
+        board.update_occupancy();
         let (pieces_checking, blockable_squares) = Self::get_check_data(board);
         
         let mut pin_ray_mask: [u64; NUM_SQUARES] = [0; NUM_SQUARES];
@@ -92,7 +93,7 @@ impl MoveGenerator {
         }
 
         // there are no blockable squares (they are all valid so all on)
-        if bits::count(all_checks) == 0 {
+        if all_checks == 0 {
             blockable_squares = !blockable_squares; 
         }
     

@@ -111,7 +111,7 @@ impl Board{
         if castling_rights_str.contains("q") { self.castling_rights |= 0b1000 }
 
 
-        self.update_occupancy();
+        // self.update_occupancy();
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
@@ -219,7 +219,7 @@ impl Board{
         self.half_move_clock
     }
 
-    fn update_occupancy(&mut self){
+    pub fn update_occupancy(&mut self){
         self.white_occupancy = 0;
         self.black_occupancy = 0;
         self.occupancy = 0;
@@ -239,13 +239,15 @@ impl Board{
 
 
     fn push_board_state(&mut self, played: MovePly, captured: Piece){
-        self.board_states[self.cur_board_state].played = played;
-        self.board_states[self.cur_board_state].captured = captured;
-        self.board_states[self.cur_board_state].half_move_clock = self.half_move_clock;
-        self.board_states[self.cur_board_state].castling_rights = self.castling_rights;
-        self.board_states[self.cur_board_state].en_passant_file = self.en_passant_file;
-        self.board_states[self.cur_board_state].can_en_passant = self.can_en_passant;
-
+        self.board_states[self.cur_board_state] = BoardState {
+            played,
+            captured,
+            half_move_clock: self.half_move_clock,
+            castling_rights: self.castling_rights,
+            en_passant_file: self.en_passant_file,
+            can_en_passant: self.can_en_passant,
+            zobrist: self.zobrist,
+        };
         self.cur_board_state += 1;
     }
     #[inline(always)]
@@ -388,12 +390,13 @@ impl Board{
         }
     }
 
-
+    #[inline(always)]
     pub fn make_move(&mut self, played: MovePly){
 
         let from = played.from();
         let to = played.to();
         let capture = self.piece_at(to);
+        let moving_piece = self.piece_at(from);
 
         self.push_board_state(played, capture);
 
@@ -402,7 +405,7 @@ impl Board{
             self.remove_piece::<INCREMENT_ZOBRIST>(capture, to);
         }
 
-        if self.piece_at(from).is_pawn() || capture.is_piece(){
+        if moving_piece.is_pawn() || capture.is_piece(){
             self.half_move_clock = 0;
         }
         else {
@@ -428,6 +431,7 @@ impl Board{
         self.update_occupancy()
     }
 
+    #[inline(always)]
     pub fn undo_move(&mut self){
         let last_board_state = unsafe { self.board_states[self.cur_board_state-1] };
         let last_played = last_board_state.played;
@@ -455,7 +459,7 @@ impl Board{
         }
 
         self.cur_board_state -= 1;
-        self.update_occupancy();
+        // self.update_occupancy();
     }
 
 

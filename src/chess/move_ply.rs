@@ -21,6 +21,12 @@ impl Default for MovePly{
     }
 }
 
+impl From<u16> for MovePly{
+    fn from(data: u16) -> Self{
+        MovePly{packed_data: data}
+    }
+}
+
 impl MovePly{
     pub fn new(from: Square, to: Square, flag: MoveFlag) -> Self{
         let packed_data =  ((flag as u16) << FLAG_SHIFT)
@@ -41,6 +47,10 @@ impl MovePly{
 
     pub fn flag(&self) -> MoveFlag{
         MoveFlag::from((self.packed_data >> FLAG_SHIFT) as u8)
+    }
+    
+    pub fn packed_data(&self) -> u16{
+        self.packed_data
     }
 }
 

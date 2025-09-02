@@ -1,3 +1,6 @@
+#![feature(integer_atomics)]
+
+use std::process::exit;
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
@@ -5,10 +8,12 @@ use crate::chess::types::color::Color::White;
 use crate::engine::eval::nnue::NNUE;
 use std::time::Instant;
 use crate::chess::precomputed::data_dump::dump_bins;
+use crate::engine::transposition::Transposition;
 
 mod chess;
 mod general;
 mod engine;
+mod uci;
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -23,14 +28,22 @@ fn main() {
     //
     // println!("{}", nnue.evaluate(White));
 
-    perft(START_POS, 7)
+    perft(START_POS, 6);
+    perft(START_POS, 6);
+    exit(1);
+
+    // Transposition::new(16);
 }
 
 
 fn perft(fen: &str, depth: u8){
     fn search(board: &mut Board, depth: u8, mut num_nodes: u128) -> u128{
+        // if depth == 0 {
+        //     return 1;
+        // }
+
         let mut move_list = MoveList::default();
-        MoveGenerator::generate(&board, &mut move_list);
+        MoveGenerator::generate(board, &mut move_list);
 
         if depth == 1 {
             return move_list.move_count() as u128;
@@ -55,7 +68,7 @@ fn perft(fen: &str, depth: u8){
     // println!("{}", board.zobrist());
 
     let mut start_pos_moves = MoveList::default();
-    MoveGenerator::generate(&board, &mut start_pos_moves);
+    MoveGenerator::generate(&mut board, &mut start_pos_moves);
 
     let timer = Instant::now();
 
