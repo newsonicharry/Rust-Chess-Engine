@@ -7,5 +7,4 @@ pub mod precomputed;
 pub mod move_generator;
 pub mod move_ply;
 pub mod move_list;
-mod arbiter;
 mod board_state;

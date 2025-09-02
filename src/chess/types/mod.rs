@@ -4,4 +4,3 @@ pub mod file;
 pub mod rank;
 pub mod color;
 pub mod move_flag;
-pub mod match_result;

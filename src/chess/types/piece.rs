@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use crate::chess::types::piece::Piece::NoPiece;
+use crate::chess::types::piece::Piece::{BlackPawn, NoPiece, WhitePawn};
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -67,7 +67,11 @@ impl Piece{
     
     pub fn is_piece(&self) -> bool {
         *self as u8 != NoPiece as u8
-    } 
+    }
+
+    pub fn is_pawn(&self) -> bool {
+        *self as u8 == WhitePawn as u8 || *self as u8 == BlackPawn as u8
+    }
 }
 
 
@@ -88,7 +92,7 @@ const BASE_PIECES: [BasePiece; 6] = [BasePiece::Pawn, BasePiece::Knight, BasePie
 
 
 impl BasePiece{
-    pub fn iterator<const ITER_TYPE: u8>() -> impl Iterator<Item = BasePiece> {
+    pub fn iterator() -> impl Iterator<Item = BasePiece> {
         BASE_PIECES.iter().copied()
     }
 }
