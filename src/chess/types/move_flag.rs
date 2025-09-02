@@ -12,8 +12,8 @@ pub enum MoveFlag {
     PromoteToQueen,
     DoubleJump,
     EnPassantCapture,
-    CastleQueenSide,
-    CastleKingSide,
+    CastleLong,
+    CastleShort,
 }
 
 impl From<u8> for MoveFlag{

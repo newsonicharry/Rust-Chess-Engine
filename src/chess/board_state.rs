@@ -21,7 +21,7 @@ impl Default for BoardState {
             captured: NoPiece,
             half_move_clock: 0,
             castling_rights: 0,
-            en_passant_file: File::A,
+            en_passant_file: File::default(),
             can_en_passant: false,
         }
     }

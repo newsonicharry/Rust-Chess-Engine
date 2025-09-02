@@ -3,7 +3,7 @@ use crate::chess::consts::MAX_MOVES;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::move_flag::MoveFlag::{CastleKingSide, CastleQueenSide};
+use crate::chess::types::move_flag::MoveFlag::{CastleShort, CastleLong};
 use crate::chess::types::piece::Piece::{BlackKing, BlackRook, WhiteKing, WhiteRook};
 use crate::chess::types::square::Square;
 use crate::engine::eval::accumulator::Accumulator;
@@ -69,14 +69,14 @@ impl NNUE {
             current_accumulator.move_piece(piece, from,to);
         }
 
-        else if move_flag == CastleKingSide {
+        else if move_flag == CastleShort {
             match board.side_to_move() {
                 Color::White => { current_accumulator.make_castle(WhiteKing, WhiteRook, Square::E1, Square::G1, Square::H1, Square::F1); }
                 Color::Black => { current_accumulator.make_castle(BlackKing, BlackRook, Square::E8, Square::G8, Square::H8, Square::F8); }
             }
         }
 
-        else if move_flag == CastleQueenSide {
+        else if move_flag == CastleLong {
             match board.side_to_move() {
                 Color::White => { current_accumulator.make_castle(WhiteKing, WhiteRook, Square::E1, Square::C1, Square::A1, Square::D1); }
                 Color::Black => { current_accumulator.make_castle(BlackKing, BlackRook, Square::E8, Square::C8, Square::A8, Square::D8); }

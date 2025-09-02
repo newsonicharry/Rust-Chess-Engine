@@ -11,6 +11,11 @@ use crate::chess::types::piece::{char_to_piece, BasePiece, Piece, ITER_BLACK, IT
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
+use crate::chess::precomputed::accessor::ZOBRIST;
+use crate::chess::precomputed::generators::zobrist::Zobrist;
+// use crate::chess::precomputed::accessor::ZOBRIST;
+// use crate::chess::precomputed::generators::zobrist;
+// use crate::chess::precomputed::generators::zobrist::Zobrist;
 
 // if a piece on a certain square moves then the castling rights must change as well
 const SQUARE_MOVED_CASTLING: [u8; NUM_SQUARES] = [13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 7, 15, 15, 15, 3, 15, 15, 11];
@@ -104,6 +109,7 @@ impl Board{
 
 
         self.update_occupancy();
+        self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
     pub fn color_orthogonal_bitboard(&self, color: Color) -> u64{
@@ -190,6 +196,10 @@ impl Board{
         }
     }
 
+    pub fn zobrist(&self) -> u64{
+        self.zobrist
+    }
+
     fn update_occupancy(&mut self){
         self.white_occupancy = 0;
         self.black_occupancy = 0;
@@ -224,12 +234,15 @@ impl Board{
         self.bitboards[piece as usize].add_piece(square);
         self.piece_lists[piece as usize].add_piece(square);
         self.piece_squares[square as usize] = piece;
+        self.zobrist ^= ZOBRIST.square_zobrist(piece, square);
     }
     #[inline(always)]
     fn remove_piece(&mut self, piece: Piece, square: Square){
         self.bitboards[piece as usize].remove_piece(square);
         self.piece_lists[piece as usize].remove_piece(square);
         self.piece_squares[square as usize] = NoPiece;
+        self.zobrist ^= ZOBRIST.square_zobrist(piece, square);
+
     }
     #[inline(always)]
     fn move_piece(&mut self, piece: Piece, from: Square, to: Square){
@@ -238,17 +251,26 @@ impl Board{
 
         self.piece_squares[from as usize] = NoPiece;
         self.piece_squares[to as usize] = piece;
+
+        self.zobrist ^= ZOBRIST.square_zobrist(piece, from);
+        self.zobrist ^= ZOBRIST.square_zobrist(piece, to);
+
     }
+
     fn apply_quiet(&mut self, played: MovePly){
         let from = played.from();
         self.move_piece(self.piece_at(from), from, played.to())
     }
+
     fn apply_double_jump(&mut self, played: MovePly){
         self.en_passant_file =  played.from().file();
         self.can_en_passant = true;
+        self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
         self.apply_quiet(played);
     }
-    fn apply_kingside_castle(&mut self){
+
+    fn apply_short_castle(&mut self){
+        self.zobrist ^= ZOBRIST.short_castle(self.side_to_move);
         match self.side_to_move {
             Color::White => {
                 self.move_piece(WhiteKing, Square::E1, Square::G1);
@@ -260,7 +282,8 @@ impl Board{
             }
         }
     }
-    fn apply_queenside_castle(&mut self){
+    fn apply_long_castle(&mut self){
+        self.zobrist ^= ZOBRIST.long_castle(self.side_to_move);
         match self.side_to_move {
             Color::White => {
                 self.move_piece(WhiteKing, Square::E1, Square::C1);
@@ -269,6 +292,7 @@ impl Board{
             Color::Black => {
                 self.move_piece(BlackKing, Square::E8, Square::C8);
                 self.move_piece(BlackRook, Square::A8, Square::D8);
+
             }
         }
     }
@@ -293,7 +317,13 @@ impl Board{
         self.move_piece(self.piece_at(to), to, played.from())
     }
 
-    fn reverse_kingside_castle(&mut self){
+    fn reverse_double_jump(&mut self, played: MovePly){
+        self.zobrist ^= ZOBRIST.pawn_jump(played.from().file());
+        self.reverse_quiet(played);
+    }
+
+    fn reverse_short_castle(&mut self){
+        self.zobrist ^= ZOBRIST.short_castle(self.side_to_move);
         match self.side_to_move {
             Color::White => {
                 self.move_piece(WhiteKing, Square::G1, Square::E1);
@@ -305,7 +335,8 @@ impl Board{
             }
         }
     }
-    fn reverse_queenside_castle(&mut self){
+    fn reverse_long_castle(&mut self){
+        self.zobrist ^= ZOBRIST.long_castle(self.side_to_move);
         match self.side_to_move {
             Color::White => {
                 self.move_piece(WhiteKing, Square::C1, Square::E1);
@@ -358,13 +389,14 @@ impl Board{
         match played.flag() {
             MoveFlag::None => self.apply_quiet(played),
             MoveFlag::DoubleJump => self.apply_double_jump(played),
-            MoveFlag::CastleKingSide => self.apply_kingside_castle(),
-            MoveFlag::CastleQueenSide => self.apply_queenside_castle(),
+            MoveFlag::CastleShort => self.apply_short_castle(),
+            MoveFlag::CastleLong => self.apply_long_castle(),
             MoveFlag::EnPassantCapture => self.apply_en_passant(played),
             _ => self.apply_promotion(played),
         }
 
         self.side_to_move = !self.side_to_move;
+        self.zobrist ^= ZOBRIST.side_to_move();
         self.update_occupancy()
     }
 
@@ -378,12 +410,13 @@ impl Board{
         self.half_move_clock = last_board_state.half_move_clock;
 
         self.side_to_move = !self.side_to_move;
-
+        self.zobrist ^= ZOBRIST.side_to_move();
 
         match last_played.flag() {
-            MoveFlag::None | MoveFlag::DoubleJump => self.reverse_quiet(last_played),
-            MoveFlag::CastleKingSide => self.reverse_kingside_castle(),
-            MoveFlag::CastleQueenSide => self.reverse_queenside_castle(),
+            MoveFlag::None => self.reverse_quiet(last_played),
+            MoveFlag::DoubleJump => self.reverse_double_jump(last_played),
+            MoveFlag::CastleShort => self.reverse_short_castle(),
+            MoveFlag::CastleLong => self.reverse_long_castle(),
             MoveFlag::EnPassantCapture => self.reverse_en_passant(last_played),
             _ => self.reverse_promotion(last_played),
         }

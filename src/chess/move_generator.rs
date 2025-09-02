@@ -243,7 +243,7 @@ impl MoveGenerator {
             if (clear_squares & attack_squares == 0) && (clear_squares & board.all_occupancy() == 0) {
 
                 let move_to_square = if board.side_to_move().is_white() { Square::from(6) } else { Square::from(62) };
-                move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleKingSide);
+                move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleShort);
 
             }
         }
@@ -255,7 +255,7 @@ impl MoveGenerator {
             if (not_attacked_squares & attack_squares == 0) && (not_occupied_squares & board.all_occupancy() == 0) {
                 let move_to_index: u8 = if board.side_to_move().is_white() { 2 } else { 58 };
 
-                move_list.add_moves(1 << move_to_index, king_square, MoveFlag::CastleQueenSide);
+                move_list.add_moves(1 << move_to_index, king_square, MoveFlag::CastleLong);
             }
 
         }

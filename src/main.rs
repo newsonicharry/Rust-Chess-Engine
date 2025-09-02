@@ -1,10 +1,10 @@
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
-use std::time::Instant;
-use crate::chess::precomputed::data_dump::dump_bins;
 use crate::chess::types::color::Color::White;
 use crate::engine::eval::nnue::NNUE;
+use std::time::Instant;
+use crate::chess::precomputed::data_dump::dump_bins;
 
 mod chess;
 mod general;
@@ -15,15 +15,15 @@ const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 
 fn main() {
     // dump_bins();
 
-    let mut board = Board::default();
-    board.new(START_POS);
+    // let mut board = Board::default();
+    // board.new(START_POS);
+    //
+    // let mut nnue = NNUE::default();
+    // nnue.new(&board);
+    //
+    // println!("{}", nnue.evaluate(White));
 
-    let mut nnue = NNUE::default();
-    nnue.new(&board);
-
-    println!("{}", nnue.evaluate(White));
-
-    // perft(START_POS, 7)
+    perft("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ", 7)
 }
 
 
@@ -52,6 +52,8 @@ fn perft(fen: &str, depth: u8){
     let mut board = Board::default();
     board.new(fen);
 
+    // println!("{}", board.zobrist());
+
     let mut start_pos_moves = MoveList::default();
     MoveGenerator::generate(&board, &mut start_pos_moves);
 
@@ -74,6 +76,7 @@ fn perft(fen: &str, depth: u8){
         }
     }
 
+    // println!("{}", board.zobrist());
 
     let nodes_per_second = all_nodes as f64 / (timer.elapsed().as_secs_f64());
     let elapsed = timer.elapsed().as_secs_f64();
