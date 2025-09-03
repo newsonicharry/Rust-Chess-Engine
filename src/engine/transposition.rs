@@ -70,7 +70,9 @@ impl Transposition {
         let index = zobrist & (self.num_entries - 1);
         let packed_data = self.entries[index as usize].load(Ordering::Relaxed);
 
-        if packed_data == 0 {
+        let unpacked_zobrist = (packed_data >> ZOBRIST_SHIFT) as u64;
+
+        if packed_data == 0 || unpacked_zobrist != zobrist {
             return None;
         }
 

@@ -46,7 +46,7 @@ impl NNUE {
 
 
 
-    pub fn make_move(&mut self, played: MovePly, board: &Board){
+    pub fn make_move(&mut self, played: &MovePly, board: &Board){
         self.push_accumulator();
 
         let move_flag =  played.flag();

@@ -285,12 +285,12 @@ impl Board{
         }
     }
 
-    fn apply_quiet(&mut self, played: MovePly){
+    fn apply_quiet(&mut self, played: &MovePly){
         let from = played.from();
         self.move_piece::<INCREMENT_ZOBRIST>(self.piece_at(from), from, played.to())
     }
 
-    fn apply_double_jump(&mut self, played: MovePly){
+    fn apply_double_jump(&mut self, played: &MovePly){
         self.en_passant_file =  played.from().file();
         self.can_en_passant = true;
         self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
@@ -325,13 +325,13 @@ impl Board{
         }
     }
 
-    fn apply_promotion(&mut self, played: MovePly){
+    fn apply_promotion(&mut self, played: &MovePly){
         self.remove_piece::<INCREMENT_ZOBRIST>(self.piece_at(played.from()), played.from());
         self.add_piece::<INCREMENT_ZOBRIST>(played.flag().promotion_piece(self.side_to_move), played.to());
 
     }
 
-    fn apply_en_passant(&mut self, played: MovePly){
+    fn apply_en_passant(&mut self, played: &MovePly){
         self.apply_quiet(played);
 
         match self.side_to_move{
@@ -391,14 +391,14 @@ impl Board{
     }
 
     #[inline(always)]
-    pub fn make_move(&mut self, played: MovePly){
+    pub fn make_move(&mut self, played: &MovePly){
 
         let from = played.from();
         let to = played.to();
         let capture = self.piece_at(to);
         let moving_piece = self.piece_at(from);
 
-        self.push_board_state(played, capture);
+        self.push_board_state(*played, capture);
 
         self.can_en_passant = false;
         if capture.is_piece() {

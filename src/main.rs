@@ -49,15 +49,12 @@ fn perft(fen: &str, depth: u8){
             return move_list.move_count() as u128;
         }
 
-        for i in 0..move_list.move_count() {
-            let cur_move = move_list.move_at(i);
-
+        for cur_move in move_list.iter(){
             board.make_move(cur_move);
-
             num_nodes += search(board, depth - 1, 0);
             board.undo_move();
         }
-
+        
         num_nodes
 
     }
@@ -79,8 +76,7 @@ fn perft(fen: &str, depth: u8){
 
     }else {
 
-        for i in 0..start_pos_moves.move_count(){
-            let cur_move = start_pos_moves.move_at(i);
+        for cur_move in start_pos_moves.iter(){
             board.make_move(cur_move);
             let num_nodes = search(&mut board, depth-1, 0 );
             all_nodes += num_nodes;
