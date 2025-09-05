@@ -46,7 +46,7 @@ pub fn search(
     }
 
     if depth == 0{
-        return quiescence_search()
+        return quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, nnue, limits)
     }
 
     order_moves(board, &move_list, &tt_entry);
@@ -84,14 +84,49 @@ pub fn search(
     alpha
 }
 
-pub fn quiescence_search() -> i16{
-    0
+pub fn quiescence_search(
+    board: &mut Board,
+    ply_searched: u8,
+    depth: u8,
+    mut alpha: i16,
+    beta: i16,
+    thread_data: &mut Thread,
+    nnue: &mut NNUE,
+    limits: &SearchLimits, ) -> i16{
+
+    let eval = nnue.evaluate(board.side_to_move());
+
+    if eval >= beta { return beta }
+    if alpha < eval { alpha = eval }
+
+    let mut move_list = MoveList::default();
+    MoveGenerator::<GEN_TACTICS>::generate(board, &mut move_list);
+
+
+    for cur_move in move_list.iter(){
+        nnue.make_move(cur_move, board);
+        board.make_move(cur_move);
+
+        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, nnue, limits);
+
+        board.undo_move();
+        nnue.undo_move();
+
+
+        if eval < alpha {
+            alpha = eval;
+        }
+
+    }
+
+
+    alpha
+}
+
+pub fn iterative_deepening(){
+
 }
 
 pub fn order_moves(board: &Board, move_list: &MoveList, prev_best_move: &Option<TTEntry>){
 
-}
-
-pub fn iterative_deepening(){
-    
 }

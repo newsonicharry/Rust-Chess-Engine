@@ -2,11 +2,10 @@
 
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
+use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_list::MoveList;
 use std::process::exit;
 use std::time::Instant;
-use crate::chess::move_generator;
-use crate::chess::move_generator::GEN_ALL;
 
 mod chess;
 mod general;

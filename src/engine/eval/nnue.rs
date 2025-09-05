@@ -106,10 +106,10 @@ impl NNUE {
         self.pop_accumulator();
     }
     
-    fn squared_crelu(value: i16) -> i32 {
-        (value.clamp(CR_MIN, CR_MAX) as i32).pow(2)
+    fn squared_crelu(value: i16) -> i16 {
+        (value.clamp(CR_MIN, CR_MAX)).pow(2)
     }
-    pub fn evaluate(&self, side_to_move: Color) -> i32 {
+    pub fn evaluate(&self, side_to_move: Color) -> i16 {
         let white_accumulator = &self.accumulator_stack[self.cur_accumulator].white;
         let black_accumulator = &self.accumulator_stack[self.cur_accumulator].black;
 
@@ -118,15 +118,15 @@ impl NNUE {
             Color::Black => (black_accumulator.iter(), white_accumulator.iter()),
         };
 
-        let mut out = 0;
+        let mut out: i16 = 0;
         for (&value, &weight) in us.zip(&MODEL.output_weights[..HIDDEN_SIZE]) {
-            out += Self::squared_crelu(value) * i32::from(weight);
+            out += Self::squared_crelu(value) * weight;
         }
         for (&value, &weight) in them.zip(&MODEL.output_weights[HIDDEN_SIZE..]) {
-            out += Self::squared_crelu(value) * i32::from(weight);
+            out += Self::squared_crelu(value) * weight;
         }
 
-        (out / QA + i32::from(MODEL.output_bias)) * EVAL_SCALE / QAB
+        (out / QA + MODEL.output_bias) * EVAL_SCALE / QAB
     }
 }
 
