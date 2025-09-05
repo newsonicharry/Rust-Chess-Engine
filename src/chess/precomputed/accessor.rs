@@ -3,6 +3,7 @@ use crate::chess::precomputed::generators::movement_mask::MovementMasks;
 use crate::chess::precomputed::generators::slider_lookup::SliderLookup;
 use crate::chess::consts::{NUM_ORTHOGONAL_ENTRIES, NUM_DIAGONAL_ENTRIES, USE_BMI2};
 use crate::chess::precomputed::generators::zobrist::Zobrist;
+use crate::chess::types::piece::{BasePiece, Piece};
 use crate::chess::types::square::Square;
 
 pub static MOVEMENT_MASKS: MovementMasks = unsafe { std::mem::transmute(*include_bytes!("./bins/movement_masks.bin")) };
@@ -51,4 +52,15 @@ pub fn bishop_lookup(square: Square, occupied: u64) -> u64{
 #[inline(always)]
 pub fn queen_lookup(square: Square, occupied: u64) -> u64{
     rook_lookup(square, occupied) | bishop_lookup(square, occupied)
+}
+
+
+#[inline(always)]
+pub fn slider_lookup(slider_type: BasePiece, square: Square, occupied: u64) -> u64{
+    match slider_type {
+        BasePiece::Bishop => bishop_lookup(square, occupied),
+        BasePiece::Rook => rook_lookup(square, occupied),
+        BasePiece::Queen => queen_lookup(square, occupied),
+        _=> unreachable!()
+    }
 }

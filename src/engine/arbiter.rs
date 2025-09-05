@@ -30,19 +30,19 @@ impl Arbiter{
         if move_list.move_count() == 0{
             let king_square = board.king_square(board.side_to_move());
 
-            let rooks_checking_king = rook_lookup(king_square, board.all_occupancy()) & board.color_bitboard(Rook, !board.side_to_move());
+            let rooks_checking_king = rook_lookup(king_square, board.occupancy()) & board.bitboard_them(Rook);
             if rooks_checking_king != 0 { return true }
 
-            let queens_checking_king = queen_lookup(king_square, board.all_occupancy()) & board.color_bitboard(Queen, !board.side_to_move());
+            let queens_checking_king = queen_lookup(king_square, board.occupancy()) & board.bitboard_them(Queen);
             if queens_checking_king != 0 { return true }
 
-            let knights_checking_king = MOVEMENT_MASKS.knight[king_square as usize] & board.color_bitboard(Knight, !board.side_to_move());
+            let knights_checking_king = MOVEMENT_MASKS.knight[king_square as usize] & board.bitboard_them(Knight);
             if knights_checking_king != 0 { return true }
 
-            let bishops_checking_king = bishop_lookup(king_square, board.all_occupancy()) & board.color_bitboard(Bishop, !board.side_to_move());
+            let bishops_checking_king = bishop_lookup(king_square, board.occupancy()) & board.bitboard_them(Bishop);
             if bishops_checking_king != 0 { return true }
 
-            let pawns_checking_king = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), king_square) & board.color_bitboard(Pawn, !board.side_to_move());
+            let pawns_checking_king = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), king_square) & board.bitboard_them(Pawn);
             if pawns_checking_king != 0 { return true }
 
             return false
@@ -59,17 +59,17 @@ impl Arbiter{
 
     // KNNvK is not a draw (as per FIDE rules)
     fn is_insufficient_material(board: &Board) -> bool{
-        if bits::count(board.all_occupancy()) <= 3 {
+        if bits::count(board.occupancy()) <= 3 {
 
-            if bits::count(board.combined_bitboard(Pawn)) != 0 {
+            if bits::count(board.bitboard_combined(Pawn)) != 0 {
                 return false;
             }
 
-            if bits::count(board.combined_bitboard(Rook)) != 0 {
+            if bits::count(board.bitboard_combined(Rook)) != 0 {
                 return false;
             }
 
-            if bits::count(board.combined_bitboard(Queen)) != 0 {
+            if bits::count(board.bitboard_combined(Queen)) != 0 {
                 return false;
             }
 

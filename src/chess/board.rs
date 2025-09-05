@@ -115,44 +115,42 @@ impl Board{
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
-    pub fn color_orthogonal_bitboard(&self, color: Color) -> u64{
-        match color {
-            Color::White => self.bitboards[WhiteRook as usize].0 | self.bitboards[WhiteQueen as usize].0,
-            Color::Black => self.bitboards[BlackRook as usize].0 | self.bitboards[BlackQueen as usize].0,
+
+    pub fn orthogonal_bitboard_them(&self) -> u64{
+        match self.side_to_move {
+            Color::Black => self.bitboards[WhiteRook as usize].0 | self.bitboards[WhiteQueen as usize].0,
+            Color::White => self.bitboards[BlackRook as usize].0 | self.bitboards[BlackQueen as usize].0,
         }
     }
 
-    pub fn color_diagonal_bitboard(&self, color: Color) -> u64{
-        match color {
-            Color::White => self.bitboards[WhiteBishop as usize].0 | self.bitboards[WhiteQueen as usize].0,
-            Color::Black => self.bitboards[BlackBishop as usize].0 | self.bitboards[BlackQueen as usize].0,
+    pub fn diagonal_bitboard_them(&self) -> u64{
+        match self.side_to_move {
+            Color::White => self.bitboards[BlackBishop as usize].0 | self.bitboards[BlackQueen as usize].0,
+            Color::Black => self.bitboards[WhiteBishop as usize].0 | self.bitboards[WhiteQueen as usize].0,
         }
     }
 
-    pub fn color_bitboard(&self, piece: BasePiece, color: Color) -> u64{
-        match color {
-            Color::White => self.bitboards[piece as usize].0,
-            Color::Black => self.bitboards[piece as usize + 6].0,
-        }
-    }
-
-    pub fn bitboard(&self, piece: Piece) -> u64{
+    pub fn bitboard_them(&self, base_piece: BasePiece) -> u64{
+        let piece = Piece::from((base_piece, !self.side_to_move));
         self.bitboards[piece as usize].0
     }
 
-    pub fn combined_bitboard(&self, piece: BasePiece) -> u64{
+    pub fn bitboard_combined(&self, piece: BasePiece) -> u64{
         self.bitboards[piece as usize].0 | self.bitboards[piece as usize + 6].0
     }
 
-    pub fn pieces_of(&self, piece: Piece) -> &[Square] {
+    pub fn piece_list(&self, piece: Piece) -> &[Square] {
         &self.piece_lists[piece as usize].indexes()
     }
 
-    pub fn color_pieces_of(&self, piece: BasePiece, color: Color) -> &[Square] {
-        match color {
-            Color::White => &self.piece_lists[piece as usize].indexes(),
-            Color::Black => &self.piece_lists[piece as usize + 6].indexes(),
-        }
+    pub fn piece_list_us(&self, base_piece: BasePiece) -> &[Square]{
+        let piece = Piece::from((base_piece, self.side_to_move));
+        &self.piece_lists[piece as usize].indexes()
+    }
+
+    pub fn piece_list_them(&self, base_piece: BasePiece) -> &[Square]{
+        let piece = Piece::from((base_piece, !self.side_to_move));
+        &self.piece_lists[piece as usize].indexes()
     }
 
     pub fn piece_at(&self, square: Square) -> Piece{
@@ -160,21 +158,27 @@ impl Board{
     }
 
     pub fn king_square(&self, color: Color) -> Square{
-
         match color {
             Color::White => self.piece_lists[WhiteKing as usize].indexes()[0],
             Color::Black => self.piece_lists[BlackKing as usize].indexes()[0],
         }
     }
 
-    pub fn color_occupancy(&self, color: Color) -> u64{
-        match color {
+    pub fn occupancy_us(&self) -> u64{
+        match self.side_to_move {
             Color::White => self.white_occupancy,
             Color::Black => self.black_occupancy,
         }
     }
 
-    pub fn all_occupancy(&self) -> u64{
+    pub fn occupancy_them(&self) -> u64{
+        match self.side_to_move {
+            Color::White => self.black_occupancy,
+            Color::Black => self.white_occupancy,
+        }
+    }
+
+    pub fn occupancy(&self) -> u64{
         self.occupancy
     }
 
@@ -208,7 +212,7 @@ impl Board{
     }
     
     pub fn past_board_states(&self) -> Option<&[BoardState]>{
-        if (self.cur_board_state-1) >= 0 {
+        if self.cur_board_state > 0 {
          return Some(&self.board_states[..(self.cur_board_state-1).max(0)])
         }
 

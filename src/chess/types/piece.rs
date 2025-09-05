@@ -1,5 +1,7 @@
 use std::fmt::Display;
-use crate::chess::types::piece::Piece::{BlackPawn, NoPiece, WhitePawn};
+use std::mem;
+use crate::chess::types::color::Color;
+use crate::chess::types::piece::Piece::{BlackPawn, NoPiece, WhitePawn, WhiteRook};
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -16,7 +18,21 @@ pub enum Piece {
     BlackRook,
     BlackQueen,
     BlackKing,
-    NoPiece
+    NoPiece,
+}
+
+
+impl From<(BasePiece, Color)> for Piece {
+    fn from(piece_data: (BasePiece, Color)) -> Self {
+        let (base_piece, color) = piece_data;
+        let raw_value = match color { 
+            Color::White => base_piece as u8,
+            Color::Black => base_piece as u8+6,
+        };
+        
+        unsafe { mem::transmute(raw_value) }
+        
+    }
 }
 
 impl Display for Piece {

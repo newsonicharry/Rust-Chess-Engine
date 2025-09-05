@@ -1,14 +1,10 @@
 #![feature(integer_atomics)]
 
-use std::process::exit;
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
-use crate::chess::types::color::Color::White;
-use crate::engine::eval::nnue::NNUE;
+use std::process::exit;
 use std::time::Instant;
-use crate::chess::precomputed::data_dump::dump_bins;
-use crate::engine::transposition::Transposition;
 
 mod chess;
 mod general;
@@ -28,8 +24,8 @@ fn main() {
     //
     // println!("{}", nnue.evaluate(White));
 
-    perft(START_POS, 6);
-    perft(START_POS, 6);
+    perft(START_POS, 7);
+    // perft(START_POS, 6);
     exit(1);
 
     // Transposition::new(16);
