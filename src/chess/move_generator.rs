@@ -8,9 +8,13 @@ use crate::chess::types::piece::BasePiece::{Bishop, King, Knight, Pawn, Queen, R
 use crate::chess::types::square::Square;
 use crate::general::bits;
 
-pub struct MoveGenerator{}
+pub struct MoveGenerator<const GENERATOR_TYPE: bool>{}
 
-impl MoveGenerator {
+pub const GEN_ALL: bool = false;
+pub const GEN_TACTICS: bool = true;
+
+
+impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
     pub fn generate(board: &mut Board, move_list: &mut MoveList) {
         board.update_occupancy();
@@ -20,14 +24,14 @@ impl MoveGenerator {
         let pinned_pieces_mask = Self::get_pins(board, &mut pin_ray_mask);
 
 
-        Self::update_pawn_moves  (board, move_list, allowed_squares, pinned_pieces_mask, &pin_ray_mask);
+        Self::update_pawn_moves(board, move_list, allowed_squares, &pin_ray_mask);
         Self::update_knight_moves(board, move_list, allowed_squares, pinned_pieces_mask);
-        
+
         Self::update_king_moves(board, move_list, pieces_checking);
 
-        Self::update_slider_moves(Bishop, board, move_list, allowed_squares, pinned_pieces_mask, &pin_ray_mask);
-        Self::update_slider_moves(Rook, board, move_list, allowed_squares, pinned_pieces_mask, &pin_ray_mask);
-        Self::update_slider_moves(Queen, board, move_list, allowed_squares, pinned_pieces_mask, &pin_ray_mask);
+        Self::update_slider_moves(Bishop, board, move_list, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves(Rook, board, move_list, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves(Queen, board, move_list, allowed_squares, &pin_ray_mask);
     }
 
 
@@ -92,7 +96,7 @@ impl MoveGenerator {
 
         // there are no blockable squares (they are all valid so all on)
         if all_checks == 0 {
-            allowed_squares = !allowed_squares; 
+            allowed_squares = !allowed_squares;
         }
     
         (all_checks, allowed_squares)
@@ -100,29 +104,22 @@ impl MoveGenerator {
     }
 
 
-    fn update_pawn_moves(board: &Board, move_list: &mut MoveList, allowed_squares: u64, pinned_pieces_mask: u64, pin_ray_mask: &[u64; 64]){
-
-
+    fn update_pawn_moves(board: &Board, move_list: &mut MoveList, allowed_squares: u64, pin_ray_mask: &[u64; 64]){
+        
         let king_square = board.king_square(board.side_to_move());
 
         for &square in board.piece_list_us(Pawn){
 
-            let mut pawn_attacks = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square) & board.occupancy_them() & allowed_squares;
-            let mut pawn_moves = MOVEMENT_MASKS.pawn_move(board.side_to_move(), square) & (!board.occupancy()) & allowed_squares;
-            let mut double_jump = MOVEMENT_MASKS.pawn_jump(board.side_to_move(), square) & (!board.occupancy())  & allowed_squares;
-
+            let pin_mask = pin_ray_mask[square as usize];
+            let pawn_attacks = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square) & board.occupancy_them() & allowed_squares & pin_mask;
+            let pawn_moves = MOVEMENT_MASKS.pawn_move(board.side_to_move(), square) & (!board.occupancy()) & allowed_squares & pin_mask;
+            let double_jump = MOVEMENT_MASKS.pawn_jump(board.side_to_move(), square) & (!board.occupancy())  & allowed_squares & pin_mask;
 
             let pawn_mask = square.mask();
-            if pinned_pieces_mask & pawn_mask != 0 {
-
-                double_jump &= pin_ray_mask[square as usize];
-                pawn_attacks &= pin_ray_mask[square as usize];
-                pawn_moves &= pin_ray_mask[square as usize];
-            }
 
             // en passant
             if let Some(en_passant_file) = board.en_passant_file() {
-                if pinned_pieces_mask & pawn_mask == 0 {
+                if pin_mask == 0 {
 
                     let en_passant_attack_mask = if board.side_to_move().is_white() {1 << (en_passant_file as u8 + 40)} else { 1<< (en_passant_file as u8 +16) };
                     let attack_square_mask = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square) & en_passant_attack_mask;
@@ -155,23 +152,34 @@ impl MoveGenerator {
                 continue;
             }
 
-            // normal moves and captures
             move_list.add_moves(pawn_attacks, square, MoveFlag::None);
-            move_list.add_moves(pawn_moves, square, MoveFlag::None);
+            
+            if GENERATOR_TYPE == GEN_ALL {
+                // normal moves and captures
+                move_list.add_moves(pawn_moves, square, MoveFlag::None);
 
-            // pawn double jump
-            let no_piece_in_way = MOVEMENT_MASKS.pawn_move(board.side_to_move(), square) & (!board.occupancy()) != 0;
-            if square.rank().is_pawn_start(board.side_to_move()) && no_piece_in_way {
-                move_list.add_moves(double_jump, square, MoveFlag::DoubleJump);
+                // pawn double jump
+                let no_piece_in_way = MOVEMENT_MASKS.pawn_move(board.side_to_move(), square) & (!board.occupancy()) != 0;
+                if square.rank().is_pawn_start(board.side_to_move()) && no_piece_in_way {
+                    move_list.add_moves(double_jump, square, MoveFlag::DoubleJump);
+                }
             }
+            
 
 
         }
     }
 
 
-    fn update_knight_moves(board: &Board, move_list: &mut MoveList, allowed_squares: u64, pinned_pieces_mask: u64) {
+    fn update_knight_moves(board: &Board, move_list: &mut MoveList, mut allowed_squares: u64, pinned_pieces_mask: u64) {
 
+        if GENERATOR_TYPE == GEN_TACTICS {
+            let enemy_king = board.king_square(!board.side_to_move());
+            let checking_squares = MOVEMENT_MASKS.knight[enemy_king as usize];
+
+            allowed_squares = (allowed_squares & board.occupancy_them()) | (allowed_squares & checking_squares);
+        }
+        
         for &square in board.piece_list_us(Knight) {
 
             if pinned_pieces_mask & square.mask() != 0 {
@@ -185,15 +193,16 @@ impl MoveGenerator {
         }
     }
 
-    fn update_slider_moves(slider_type: BasePiece, board: &Board, move_list: &mut MoveList, allowed_squares: u64, pinned_pieces_mask: u64, pin_ray_mask: &[u64; 64]) {
+    fn update_slider_moves(slider_type: BasePiece, board: &Board, move_list: &mut MoveList, mut allowed_squares: u64, pin_ray_mask: &[u64; 64]) {
+        if GENERATOR_TYPE == GEN_TACTICS {
+            let enemy_king = board.king_square(!board.side_to_move());
+            let checking_squares = slider_lookup(slider_type, enemy_king, board.occupancy());
 
+            allowed_squares = (allowed_squares & board.occupancy_them()) | (allowed_squares & checking_squares);
+        }
+        
         for &square in  board.piece_list_us(slider_type){
-            let mut slider_moves: u64 = slider_lookup(slider_type, square, board.occupancy()) & !board.occupancy_us() & allowed_squares;
-
-            if pinned_pieces_mask & square.mask() != 0 {
-                slider_moves &= pin_ray_mask[square as usize];
-            }
-
+            let slider_moves: u64 = slider_lookup(slider_type, square, board.occupancy()) & !board.occupancy_us() & allowed_squares & pin_ray_mask[square as usize];
             move_list.add_moves(slider_moves, square, MoveFlag::None);
         }
     }
@@ -203,8 +212,14 @@ impl MoveGenerator {
         let attack_squares =  Self::get_enemy_attacks(board);
         let king_square = board.king_square(board.side_to_move());
 
-        let valid_moves: u64 = (MOVEMENT_MASKS.king[king_square as usize]) & !board.occupancy_us() & !attack_squares;
+        let mut valid_moves: u64 = (MOVEMENT_MASKS.king[king_square as usize]) & !board.occupancy_us() & !attack_squares;
 
+        if GENERATOR_TYPE == GEN_TACTICS { 
+            valid_moves &= board.occupancy_them();
+            move_list.add_moves(valid_moves, king_square, MoveFlag::None);
+            return;
+        }
+        
         move_list.add_moves(valid_moves, king_square, MoveFlag::None);
 
         if board.has_short_castle_rights(board.side_to_move()) && pieces_checking == 0{
@@ -243,7 +258,7 @@ impl MoveGenerator {
 
         let enemy_orthogonal = board.orthogonal_bitboard_them();
         let enemy_diagonal = board.diagonal_bitboard_them();
-        
+
 
         let possible_orthogonally_pinned: u64 = MOVEMENT_MASKS.rook[friendly_king_square as usize] & enemy_orthogonal;
         let possible_diagonally_pinned: u64 = MOVEMENT_MASKS.bishop[friendly_king_square as usize] & enemy_diagonal;

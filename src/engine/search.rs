@@ -7,6 +7,7 @@ use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
+use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS};
 use std::thread::Thread;
 
 const INFINITY: i16 = 30000;
@@ -24,7 +25,7 @@ pub fn search(
 ) -> i16{
 
     let mut move_list = MoveList::default();
-    MoveGenerator::generate(board, &mut move_list);
+    MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
 
     let match_result = Arbiter::arbitrate(board, &move_list);
     match match_result {

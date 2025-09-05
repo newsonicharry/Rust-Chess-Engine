@@ -5,6 +5,8 @@ use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
 use std::process::exit;
 use std::time::Instant;
+use crate::chess::move_generator;
+use crate::chess::move_generator::GEN_ALL;
 
 mod chess;
 mod general;
@@ -39,7 +41,7 @@ fn perft(fen: &str, depth: u8){
         // }
 
         let mut move_list = MoveList::default();
-        MoveGenerator::generate(board, &mut move_list);
+        MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
 
         if depth == 1 {
             return move_list.move_count() as u128;
@@ -58,10 +60,9 @@ fn perft(fen: &str, depth: u8){
     let mut board = Board::default();
     board.new(fen);
 
-    // println!("{}", board.zobrist());
 
     let mut start_pos_moves = MoveList::default();
-    MoveGenerator::generate(&mut board, &mut start_pos_moves);
+    MoveGenerator::<GEN_ALL>::generate(&mut board, &mut start_pos_moves);
 
     let timer = Instant::now();
 
@@ -71,7 +72,6 @@ fn perft(fen: &str, depth: u8){
         all_nodes = search(&mut board, depth, 0 )
 
     }else {
-
         for cur_move in start_pos_moves.iter(){
             board.make_move(cur_move);
             let num_nodes = search(&mut board, depth-1, 0 );
@@ -81,7 +81,6 @@ fn perft(fen: &str, depth: u8){
         }
     }
 
-    // println!("{}", board.zobrist());
 
     let nodes_per_second = all_nodes as f64 / (timer.elapsed().as_secs_f64());
     let elapsed = timer.elapsed().as_secs_f64();
