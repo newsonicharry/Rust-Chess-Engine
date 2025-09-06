@@ -3,13 +3,13 @@ use std::mem;
 pub const NUM_FEATURES: usize = 768;
 pub const HIDDEN_SIZE: usize = 256;
 
-pub const CR_MIN: i16 = 0;
-pub const CR_MAX: i16 = 255;
+pub const CR_MIN: i32 = 0;
+pub const CR_MAX: i32 = 255;
 
-pub const QA: i16 = 255;
-pub const QAB: i16 = 255 * 64;
+pub const QA: i32 = 255;
+pub const QAB: i32 = 255 * 64;
 
-pub const EVAL_SCALE: i16 = 400;
+pub const EVAL_SCALE: i32 = 400;
 
 
 

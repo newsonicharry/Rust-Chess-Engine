@@ -18,12 +18,11 @@ pub fn search(
     depth: u8,
     mut alpha: i16,
     beta: i16,
-    thread_data: &mut Thread,
+    // thread_data: &mut Thread,
     tt: &mut Transposition,
     nnue: &mut NNUE,
-    limits: &SearchLimits,
+    // limits: &SearchLimits,
 ) -> i16{
-
     let mut move_list = MoveList::default();
     MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
 
@@ -45,38 +44,44 @@ pub fn search(
         }
     }
 
-    if depth == 0{
-        return quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, nnue, limits)
+    if depth <= 0{
+        // return 0;
+        // return nnue.evaluate(board.side_to_move());
+        return quiescence_search(board, ply_searched+1, 8, alpha, beta, nnue)
     }
 
     order_moves(board, &move_list, &tt_entry);
 
     let mut node_type = TTFlag::Upper;
-    let mut best_move = &move_list.move_at(0);
+    let mut best_move = &move_list.move_at( 10);
     let mut best_eval = -INFINITY;
-    
+
+
     for cur_move in move_list.iter(){
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
         
-        let eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, tt, nnue, limits);
+        let eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, tt, nnue);
         
         board.undo_move();
         nnue.undo_move();
-        
-        if eval >= beta { 
-            tt.update(board.zobrist(), *cur_move, eval, depth, TTFlag::Lower)
+
+        if eval >= beta {
+            tt.update(board.zobrist(), *cur_move, eval, depth, TTFlag::Lower);
+            return beta;
         }
-        if eval < alpha { 
+        if eval > alpha {
             alpha = eval;
             node_type = TTFlag::Exact;
-        }
-        
-        if eval > best_eval { 
             best_move = cur_move;
-            best_eval = eval;
         }
+
+
         
+    }
+
+    if ply_searched == 0 {
+        tt.best_move = best_move.clone();
     }
 
     tt.update(board.zobrist(), *best_move, best_eval, depth, node_type);
@@ -90,14 +95,19 @@ pub fn quiescence_search(
     depth: u8,
     mut alpha: i16,
     beta: i16,
-    thread_data: &mut Thread,
+    // thread_data: &mut Thread,
     nnue: &mut NNUE,
-    limits: &SearchLimits, ) -> i16{
+    // limits: &SearchLimits,
+) -> i16{
 
     let eval = nnue.evaluate(board.side_to_move());
 
     if eval >= beta { return beta }
     if alpha < eval { alpha = eval }
+
+    if depth == 0 {
+        return alpha;
+    }
 
     let mut move_list = MoveList::default();
     MoveGenerator::<GEN_TACTICS>::generate(board, &mut move_list);
@@ -107,7 +117,7 @@ pub fn quiescence_search(
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
-        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, nnue, limits);
+        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, nnue,);
 
         board.undo_move();
         nnue.undo_move();

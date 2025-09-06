@@ -1,11 +1,15 @@
 #![feature(integer_atomics)]
 
+use std::f32::INFINITY;
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_list::MoveList;
 use std::process::exit;
 use std::time::Instant;
+use crate::engine::eval::nnue::NNUE;
+use crate::engine::search::search;
+use crate::engine::transposition::Transposition;
 
 mod chess;
 mod general;
@@ -15,21 +19,19 @@ mod uci;
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 fn main() {
-    // dump_bins();
+    let mut tt = Transposition::new(16);
 
-    // let mut board = Board::default();
-    // board.new(START_POS);
-    //
-    // let mut nnue = NNUE::default();
-    // nnue.new(&board);
-    //
-    // println!("{}", nnue.evaluate(White));
+    let mut board = Board::default();
+    board.new(START_POS);
 
-    perft(START_POS, 7);
-    // perft(START_POS, 6);
-    exit(1);
+    let mut nnue = NNUE::default();
+    nnue.new(&board);
 
-    // Transposition::new(16);
+    search(&mut board, 0, 6, -30000, 30000, &mut tt, &mut nnue);
+
+    println!("{}", tt.best_move);
+
+
 }
 
 

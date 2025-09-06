@@ -48,6 +48,8 @@ pub struct Transposition {
     entries: Box<[AtomicU128]>,
     num_entries: u64,
     generation: u16,
+
+    pub best_move: MovePly,
 }
 
 impl Transposition {
@@ -57,12 +59,12 @@ impl Transposition {
         let max_num_entries = size_as_bytes / entry_size;
 
         let round_down_pow2 = 1 << (63 - max_num_entries.leading_zeros());
-        let entries = Vec::with_capacity(round_down_pow2 as usize).into_boxed_slice();
-
+        let entries: Vec<AtomicU128> = (0..round_down_pow2).map(|_| AtomicU128::new(0)).collect();
         Self{
-            entries,
+            entries: entries.into(),
             num_entries: round_down_pow2,
             generation: MAX_MOVES as u16,
+            best_move: MovePly::default()
         }
     }
 

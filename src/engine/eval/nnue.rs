@@ -33,21 +33,12 @@ impl NNUE {
             self.accumulator_stack[self.cur_accumulator].add_piece(piece, square);
         }
     }
-
-
-    fn push_accumulator(&mut self){
-        self.cur_accumulator += 1;
-        self.accumulator_stack[self.cur_accumulator] = self.accumulator_stack[self.cur_accumulator-1];
-    }
-
-    fn pop_accumulator(&mut self){
-        self.cur_accumulator -= 1;
-    }
-
-
+    
 
     pub fn make_move(&mut self, played: &MovePly, board: &Board){
-        self.push_accumulator();
+        self.cur_accumulator += 1;
+        self.accumulator_stack[self.cur_accumulator] = self.accumulator_stack[self.cur_accumulator-1];
+        let current_accumulator = &mut self.accumulator_stack[self.cur_accumulator];
 
         let move_flag =  played.flag();
         let from = played.from();
@@ -56,7 +47,6 @@ impl NNUE {
         let piece = board.piece_at(from);
         let capture= board.piece_at(to);
 
-        let current_accumulator = &mut self.accumulator_stack[self.cur_accumulator];
 
         if move_flag == MoveFlag::None{
             match capture.is_piece() {
@@ -64,9 +54,9 @@ impl NNUE {
                 false => current_accumulator.move_piece(piece, from, to)
             }
         }
-
+            
         else if move_flag == MoveFlag::DoubleJump {
-            current_accumulator.move_piece(piece, from,to);
+            current_accumulator.move_piece(piece, from, to);
         }
 
         else if move_flag == CastleShort {
@@ -103,11 +93,11 @@ impl NNUE {
     }
 
     pub fn undo_move(&mut self){
-        self.pop_accumulator();
+        self.cur_accumulator -= 1;
     }
     
-    fn squared_crelu(value: i16) -> i16 {
-        (value.clamp(CR_MIN, CR_MAX)).pow(2)
+    fn squared_crelu(value: i16) -> i32 {
+        (value as i32).clamp(CR_MIN, CR_MAX).pow(2)
     }
     pub fn evaluate(&self, side_to_move: Color) -> i16 {
         let white_accumulator = &self.accumulator_stack[self.cur_accumulator].white;
@@ -118,15 +108,15 @@ impl NNUE {
             Color::Black => (black_accumulator.iter(), white_accumulator.iter()),
         };
 
-        let mut out: i16 = 0;
+        let mut out = 0;
         for (&value, &weight) in us.zip(&MODEL.output_weights[..HIDDEN_SIZE]) {
-            out += Self::squared_crelu(value) * weight;
+            out += Self::squared_crelu(value) * weight as i32;
         }
         for (&value, &weight) in them.zip(&MODEL.output_weights[HIDDEN_SIZE..]) {
-            out += Self::squared_crelu(value) * weight;
+            out += Self::squared_crelu(value) * weight as i32;
         }
 
-        (out / QA + MODEL.output_bias) * EVAL_SCALE / QAB
+        ((out / QA + MODEL.output_bias as i32) * EVAL_SCALE / QAB) as i16
     }
 }
 

@@ -111,7 +111,7 @@ impl Board{
         if castling_rights_str.contains("q") { self.castling_rights |= 0b1000 }
 
 
-        // self.update_occupancy();
+        self.update_occupancy();
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 

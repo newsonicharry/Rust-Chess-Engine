@@ -23,7 +23,12 @@ impl Default for Accumulator {
 impl Accumulator {
     fn nnue_index(piece: Piece, square: Square) -> (usize, usize) {
         let white_idx = NUM_SQUARES * piece as usize + square as usize;
-        let black_idx = NUM_SQUARES * ((piece as usize + 6) % 12) + square.vert_flip() as usize;
+
+        let mut reversed_color = piece as u8;
+        if reversed_color >= 6 { reversed_color -= 6; }
+        else                   { reversed_color += 6; }
+
+        let black_idx = NUM_SQUARES * reversed_color as usize + square.vert_flip() as usize;
 
         (white_idx * HIDDEN_SIZE, black_idx * HIDDEN_SIZE)
     }
