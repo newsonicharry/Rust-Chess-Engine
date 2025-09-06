@@ -11,6 +11,7 @@ use crate::engine::eval::network::*;
 use crate::general::bits;
 
 
+#[derive(Copy, Clone)]
 pub struct NNUE{
     accumulator_stack: [Accumulator; MAX_MOVES],
     cur_accumulator: usize,
@@ -119,4 +120,5 @@ impl NNUE {
         ((out / QA + MODEL.output_bias as i32) * EVAL_SCALE / QAB) as i16
     }
 }
+
 

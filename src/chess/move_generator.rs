@@ -119,7 +119,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
             // en passant
             if let Some(en_passant_file) = board.en_passant_file() {
-                if pin_mask == 0 {
+                if pin_mask == u64::MAX  {
 
                     let en_passant_attack_mask = if board.side_to_move().is_white() {1 << (en_passant_file as u8 + 40)} else { 1<< (en_passant_file as u8 +16) };
                     let attack_square_mask = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square) & en_passant_attack_mask;

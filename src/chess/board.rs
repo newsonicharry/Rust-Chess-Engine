@@ -23,6 +23,7 @@ const INCREMENT_ZOBRIST: bool = true;
 const IGNORE_ZOBRIST: bool = false;
 
 
+#[derive(Copy, Clone)]
 pub struct Board{
     bitboards: [Bitboard; NUM_PIECES],
     piece_lists: [PieceList; NUM_PIECES],

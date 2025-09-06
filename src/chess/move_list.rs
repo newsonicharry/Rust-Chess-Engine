@@ -1,4 +1,6 @@
 use std::slice::Iter;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::square::Square;
@@ -61,7 +63,12 @@ impl MoveList {
         self.moves[index]
     }
 
-    pub fn iter(&self) -> Iter<'_, MovePly> {
+    pub fn iter(&mut self) -> Iter<'_, MovePly> {
+
         self.moves[..self.move_count].iter()
+
+        
     }
+
+
 }

@@ -81,7 +81,7 @@ impl Transposition {
         Some(TTEntry::from(packed_data))
     }
 
-    pub fn update(&mut self, zobrist: u64, cur_move: MovePly, eval: i16, depth: u8, tt_flag: TTFlag ) {
+    pub fn update(&self, zobrist: u64, cur_move: MovePly, eval: i16, depth: u8, tt_flag: TTFlag ) {
 
         let mut score: i16 = depth as i16 * DEPTH_MULTIPLIER + self.generation as i16 * AGE_MULTIPLIER;
 
