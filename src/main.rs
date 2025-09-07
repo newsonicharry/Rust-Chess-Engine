@@ -15,20 +15,9 @@ mod general;
 mod engine;
 mod uci;
 
-const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 fn main() {
-
-    let mut board = Board::default();
-    board.new(START_POS);
-
-    let mut nnue = NNUE::default();
-    nnue.new(&board);
-
-    let tt = Arc::new(Transposition::new(16));
-
-    let search_limit = SearchLimits::new(0, 0);
-
+    
 
 
 }
