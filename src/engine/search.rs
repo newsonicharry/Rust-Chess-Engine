@@ -9,8 +9,10 @@ use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::thread;
 use std::time::Instant;
+use crate::chess::move_ply::MovePly;
 
 const INFINITY: i16 = 30000;
 
@@ -53,7 +55,7 @@ fn search(
         return quiescence_search(board, ply_searched+1, 8, alpha, beta, nnue, limits)
     }
 
-    order_moves(board, &move_list, &tt_entry);
+    order_moves(board, &mut move_list, &tt_entry);
 
     let mut node_type = TTFlag::Upper;
     let mut best_move = &move_list.move_at( 0);
@@ -64,9 +66,6 @@ fn search(
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
-        if ply_searched == 0 {
-            println!("cur move {cur_move}");
-        }
 
         let eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, tt, nnue, limits);
 
@@ -90,7 +89,7 @@ fn search(
     }
 
     if ply_searched == 0 {
-        // tt.best_move = best_move.clone();
+        tt.best_move.store(best_move.packed_data(), Ordering::Relaxed);
     }
 
     tt.update(board.zobrist(), *best_move, best_eval, depth, node_type);
@@ -145,7 +144,7 @@ fn quiescence_search(
     alpha
 }
 
-pub(crate) fn iterative_deepening(
+fn iterative_deepening(
     board: &mut Board,
     tt: &Transposition,
     nnue: &mut NNUE,
@@ -162,20 +161,25 @@ pub(crate) fn iterative_deepening(
         if search_limits.is_soft_stop() { break }
     }
 
-    println!("bestmove {}", tt.best_move)
+
+    let best_move: MovePly = tt.best_move.load(Ordering::Relaxed).into();
+    println!("bestmove {}",  best_move);
 
 }
 
-pub fn order_moves(board: &Board, move_list: &MoveList, prev_best_move: &Option<TTEntry>){
+pub fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<TTEntry>){
 
 }
 
 pub fn search_start(
     num_threads: usize,
     board: Board,
-    tt: Arc<Transposition>,
-    nnue: NNUE,){
-    
+    tt: &Arc<Transposition>,
+    search_limits: SearchLimits){
+
+    let mut nnue = NNUE::default();
+    nnue.new(&board);
+
     let mut handles = Vec::new();
     for _ in 0..num_threads {
 
@@ -186,7 +190,7 @@ pub fn search_start(
         let handle = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
             let mut thread_board = board.clone();
             let mut thread_nnue = nnue.clone();
-            search(&mut thread_board, 0, 7, -INFINITY, INFINITY, &tt_new, &mut thread_nnue, &SearchLimits::new(1000000000000, 1000000000000))
+            iterative_deepening(&mut thread_board, &tt_new, &mut thread_nnue, &search_limits);
         });
 
         handles.push(handle.unwrap());

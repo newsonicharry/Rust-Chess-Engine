@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU128, Ordering};
+use std::sync::atomic::{AtomicU128, AtomicU16, Ordering};
 use crate::chess::consts::MAX_MOVES;
 use crate::chess::move_ply::MovePly;
 use crate::engine::types::tt_flag::TTFlag;
@@ -49,7 +49,7 @@ pub struct Transposition {
     num_entries: u64,
     generation: u16,
 
-    pub best_move: MovePly,
+    pub best_move: AtomicU16,
 }
 
 impl Transposition {
@@ -64,7 +64,7 @@ impl Transposition {
             entries: entries.into(),
             num_entries: round_down_pow2,
             generation: MAX_MOVES as u16,
-            best_move: MovePly::default()
+            best_move: AtomicU16::new(0)
         }
     }
 

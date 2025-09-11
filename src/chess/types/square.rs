@@ -29,6 +29,15 @@ impl From<u8> for Square{
     }
 }
 
+impl From<String> for Square{
+    fn from(square: String) -> Self {
+        let file = File::from(square.chars().collect::<Vec<_>>()[0].to_string());
+        let rank =Rank::from(square.chars().collect::<Vec<_>>()[0].to_string());
+        
+        Square::from((file, rank))
+    }
+}
+
 impl From<(File, Rank)> for Square{
     fn from(cords: (File, Rank)) -> Self {
         let (file, rank) = cords;
@@ -50,6 +59,12 @@ impl Rem<u8> for Square {
 impl PartialEq<u8> for Square {
     fn eq(&self, other: &u8) -> bool {
         *self as u8 == *other
+    }
+}
+
+impl PartialEq<Self> for Square {
+    fn eq(&self, other: &Self) -> bool {
+        *self as u8 == *other as u8
     }
 }
 

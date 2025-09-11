@@ -1,5 +1,6 @@
 use std::str::FromStr;
-use crate::uci::commands::UCICommands;
+use crate::chess::move_ply::MovePly;
+use crate::uci::commands::Commands;
 use crate::uci::option_table::{SPIN_OPTION_TABLE, BUTTON_OPTION_TABLE, OptionType};
 pub struct UCIParser {}
 
@@ -31,18 +32,15 @@ impl UCIParser {
         Ok(final_str.to_string())
     }
 
-    fn parse_set_option(split_message: Vec<&str>) -> UCICommands {
-
-        let original_message = String::from(split_message.join(" "));
-
+    fn parse_set_option(split_message: Vec<&str>) -> Commands {
         match split_message.get(1) {
             Some(msg) => if *msg != "name" {
                 println!("Command setoption did not include 'name' as a parameter.");
-                return UCICommands::Unknown(original_message);
+                return Commands::IncorrectFormat;
             }
             None => {
                 println!("Command setoption must be formatted as 'setoption name <option-name>'");
-                return UCICommands::Unknown(original_message);
+                return Commands::IncorrectFormat;
             },
         }
 
@@ -50,7 +48,7 @@ impl UCIParser {
 
         if option_name_wrapped.is_err() {
             println!("Command setoption did not include the value for name");
-            return UCICommands::Unknown(original_message);
+            return Commands::IncorrectFormat;
         }
 
         let option_name = option_name_wrapped.unwrap();
@@ -67,13 +65,13 @@ impl UCIParser {
 
         if option_type == OptionType::NoType {
             println!("Command setoption of name '{option_name}' is not a valid option.");
-            return UCICommands::Unknown(original_message);
+            return Commands::IncorrectFormat;
         }
 
         if option_type == OptionType::Spin {
             if !split_message.contains(&"value") {
                 println!("Command setoption of option type spin must include a value parameter.");
-                return UCICommands::Unknown(original_message);
+                return Commands::IncorrectFormat;
             }
 
             let start_index = split_message.iter().position(|&x| x == "value").unwrap()+1;
@@ -81,24 +79,23 @@ impl UCIParser {
             let value_wrapped = Self::collect_until_end_or_breakpoint(start_index, &split_message, None);
             if value_wrapped.is_err() {
                 println!("Command setoption did not include any data for value.");
+                return Commands::IncorrectFormat;
             }
 
             let value = value_wrapped.unwrap();
 
-            return UCICommands::SetOption { name: option_name, option_type, value: Some(value) }
+            return Commands::SetOption { name: option_name, option_type, value: Some(value) }
         }
 
         if option_type == OptionType::Button {
-            return UCICommands::SetOption { name: option_name, option_type: OptionType::Button, value: None }
+            return Commands::SetOption { name: option_name, option_type: OptionType::Button, value: None }
         }
 
-        UCICommands::Unknown("The function failed".to_string())
+        Commands::Unknown("The function failed".to_string())
     }
 
 
-    fn parse_position(split_message: Vec<&str>) -> UCICommands {
-        let original_message = String::from(split_message.join(" "));
-
+    fn parse_position(split_message: Vec<&str>) -> Commands {
         let fen: String;
 
         match split_message.get(1) {
@@ -107,7 +104,7 @@ impl UCIParser {
 
                 if unwrapped_fen.is_err() {
                     println!("Command position did not include a fen for the fen parameter.");
-                    return UCICommands::Unknown(original_message);
+                    return Commands::IncorrectFormat;
                 }
 
                 fen = unwrapped_fen.unwrap();
@@ -118,31 +115,32 @@ impl UCIParser {
 
             Some(&msg) => {
                 println!("Command position does not include the parameter '{msg}'.");
-                return UCICommands::Unknown(original_message);
+                return Commands::IncorrectFormat;
             }
 
             None => {
                 println!("Command position must include a parameter.'");
-                return UCICommands::Unknown(original_message);
+                return Commands::IncorrectFormat;
             },
         }
 
 
         let moves_position_wrapped = split_message.iter().position(|&x| x == "value");
         if moves_position_wrapped.is_none() {
-            return UCICommands::Position { fen: Some(fen.to_string()), moves: None};
+            return Commands::Position { fen: fen.to_string(), moves: None};
         }
 
         let moves_position = moves_position_wrapped.unwrap();
 
         if moves_position+1 == split_message.len() {
             println!("Command position did not include a value for the moves parameter, ignoring moves.");
-            return UCICommands::Position { fen: Some(fen.to_string()), moves: None};
+            return Commands::Position { fen: fen.to_string(), moves: None};
 
         }
 
         let moves = Some(split_message[moves_position..].iter().map(|x| x.to_string()).collect::<Vec<String>>());
-        UCICommands::Position { fen: Some(fen.to_string()), moves}
+
+        Commands::Position { fen: fen.to_string(), moves}
     }
 
 
@@ -151,16 +149,14 @@ impl UCIParser {
         let u32_from = u32::from_str(message);
 
         if u32_from.is_err() {
-            println!("Command go parameter value is not a valid positive integer.");
+            println!("The parameter value must be a positive integer.");
             return Err(());
         }
 
         Ok(())
     }
 
-    fn parse_go(split_message: Vec<&str>) -> UCICommands {
-        let original_message = String::from(split_message.join(" "));
-
+    fn parse_go(split_message: Vec<&str>) -> Commands {
         let mut move_time: Option<u32> = None;
         let mut wtime: Option<u32> = None;
         let mut btime: Option<u32> = None;
@@ -173,11 +169,11 @@ impl UCIParser {
             let message_type = split_message[i];
             let message_value = split_message[i+1];
 
-            if Self::message_is_u32(message_value).is_err() { return UCICommands::Unknown(original_message); }
+            if Self::message_is_u32(message_value).is_err() { return Commands::IncorrectFormat; }
             let as_u32 = Some(u32::from_str(message_value).unwrap());
 
             match message_type {
-                "move_time" => { move_time = as_u32; },
+                "movetime" => { move_time = as_u32; },
                 "wtime" => { wtime = as_u32; },
                 "btime" => { btime = as_u32; },
                 "winc" => { winc = as_u32; },
@@ -186,39 +182,54 @@ impl UCIParser {
 
                 msg => {
                     println!("Command go does not include '{msg}' as a valid message type.");
-                    return UCICommands::Unknown(original_message);
+                    return Commands::IncorrectFormat;
                 }
 
 
             }
         }
 
-        UCICommands::Go {move_time, wtime, btime, winc, binc, moves_to_go}
+        Commands::Go {move_time, wtime, btime, winc, binc, moves_to_go}
     }
 
-    pub fn parse(message: &str) -> UCICommands {
+    pub fn parse_perft(split_message: Vec<&str>) -> Commands {
+        if split_message.len() == 1 {
+            println!("Command perft depth parameter is not filled.");
+            return Commands::IncorrectFormat;
+        }
+
+        let depth = split_message.get(1).unwrap();
+        let is_u32 = Self::message_is_u32(depth);
+
+        if is_u32.is_err() {
+            return Commands::IncorrectFormat;
+        }
+
+        Commands::Perft { depth: u32::from_str(depth).unwrap() }
+    }
+
+    pub fn parse(message: &str) -> Commands {
 
         let split_message: Vec<_> = message.split_whitespace().collect();
 
         match split_message.get(0){
-            None => { return UCICommands::Unknown(String::from(message))  },
+            None => { return Commands::Unknown(String::from(message))  },
             Some(_) => {}
         }
 
         let initial_command = *split_message.get(0).unwrap();
 
         match initial_command {
-            "uci" => { UCICommands::Uci },
-            "isready" => { UCICommands::IsReady },
-            "quit" => { UCICommands::Quit },
+            "uci" => { Commands::Uci },
+            "isready" => { Commands::IsReady },
+            "quit" => { Commands::Quit },
+            "help" => { Commands::Help },
             "setoption" => { Self::parse_set_option(split_message) },
             "position" => { Self::parse_position(split_message) },
             "go" => { Self::parse_go(split_message) },
+            "perft" => { Self::parse_perft(split_message) },
 
-            _ => {
-                println!("Unknown command: '{}'. Type help for more information.", initial_command);
-                UCICommands::Unknown(String::from(initial_command))
-            },
+            _ => { Commands::Unknown(String::from(initial_command)) },
         }
 
     }

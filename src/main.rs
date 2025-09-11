@@ -1,14 +1,19 @@
 #![feature(integer_atomics)]
 
+use std::process::exit;
+use std::sync::Arc;
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_list::MoveList;
-use crate::engine::eval::nnue::NNUE;
+use crate::uci::parser;
+use std::time::Instant;
+use crate::chess::move_ply;
+use crate::chess::types::color::Color;
+use crate::engine::search::search_start;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::Transposition;
-use std::sync::Arc;
-use std::time::Instant;
+use crate::uci::commands::Commands;
 
 mod chess;
 mod general;
@@ -16,14 +21,109 @@ mod engine;
 mod uci;
 
 
+const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+const HELP_MSG: &str = "\nA fairly generic rust engine supporting the UCI protocol.\n\
+Commands are the same as the uci protocol, except perft which can be called by perft <depth>\n\
+Some UCI features are yet to be implemented.\
+";
+
 fn main() {
+    println!("Generic Rust UCI Engine by slightly autistic teenager\n");
+
+    let mut current_fen: String = START_POS.to_string();
+    let mut board = Board::default();
+    board.new(&current_fen);
+
+    let mut tt_size = 16;
+    let mut tt = Arc::new(Transposition::new(tt_size));
+
+    let num_threads = 1;
     
+    loop {
+        let mut input: String = String::new();
+        std::io::stdin().read_line(&mut input).expect("Failed to read input line.");
+
+        let uci_command = parser::UCIParser::parse(&input);
+
+        match uci_command {
+            Commands::Uci => println!("uciok"),
+            Commands::IsReady => println!("readyok"),
+            Commands::Quit => exit(1),
+
+            Commands::Help => println!("{}", HELP_MSG),
+
+            Commands::UciNewGame => {
+                tt = Arc::new(Transposition::new(tt_size));
+                current_fen = START_POS.to_string();
+                board.new(&current_fen);
+            },
+
+            Commands::Perft { depth } => { perft(&mut board, depth as u8) }
+
+            Commands::Position {fen, moves } => {
+                current_fen = fen;
+                board.new(&current_fen);
+                if let Some(str_moves) = moves{
+                    for str_move in str_moves{
+                        board.make_move(&move_ply::uci_move_parser(str_move, &board))
+                    }
+                }
+            }
+
+            Commands::Go { move_time, wtime, btime, winc, binc, moves_to_go} => {
+
+                let mut hard_think_time: u32 = 1000;
+                let mut soft_think_time: u32 = 1000;
+
+
+                let mut moves_left: u32 = 20;
+
+                if let Some(moves_to_go) = moves_to_go { moves_left = moves_to_go; }
+
+                match board.side_to_move() {
+                    Color::White => {
+                        if let Some(wtime) = wtime { hard_think_time = wtime / moves_left; }
+                        if let Some(winc) = winc { hard_think_time += winc; }
+                    }
+                    Color::Black => {
+                        if let Some(btime) = btime { hard_think_time = btime / moves_left; }
+                        if let Some(binc) = binc { hard_think_time += binc; }
+                    }
+                }
+
+                if let Some(move_time) = move_time {
+                    hard_think_time = move_time;
+                    soft_think_time = move_time;
+                }else {
+                    soft_think_time = (hard_think_time as f64 * 0.6f64) as u32;
+                }
+                
+                let search_limits = SearchLimits::new(hard_think_time, soft_think_time);
+                search_start(num_threads, board, &tt, search_limits);
+            }
+            
+            Commands::SetOption {option_type, value, name} => {
+       
+                
+            }
+
+            Commands::Unknown(line) =>  println!("Unknown command: '{line}'. Type help for more information."),
+
+            _ => {}
+        }
+
+
+
+    }
 
 
 }
 
 
-fn perft(fen: &str, depth: u8){
+
+
+fn perft(board: &mut Board, depth: u8){
     fn search(board: &mut Board, depth: u8, mut num_nodes: u128) -> u128{
         // if depth == 0 {
         //     return 1;
@@ -46,24 +146,22 @@ fn perft(fen: &str, depth: u8){
 
     }
 
-    let mut board = Board::default();
-    board.new(fen);
 
 
     let mut start_pos_moves = MoveList::default();
-    MoveGenerator::<GEN_ALL>::generate(&mut board, &mut start_pos_moves);
+    MoveGenerator::<GEN_ALL>::generate(board, &mut start_pos_moves);
 
     let timer = Instant::now();
 
     let mut all_nodes = 0;
 
     if depth == 1 {
-        all_nodes = search(&mut board, depth, 0 )
+        all_nodes = search(board, depth, 0 )
 
     }else {
         for cur_move in start_pos_moves.iter(){
             board.make_move(cur_move);
-            let num_nodes = search(&mut board, depth-1, 0 );
+            let num_nodes = search(board, depth-1, 0 );
             all_nodes += num_nodes;
             board.undo_move();
             println!("{cur_move}: {num_nodes}");

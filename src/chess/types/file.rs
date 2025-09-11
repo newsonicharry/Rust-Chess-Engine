@@ -13,6 +13,23 @@ impl From<u8> for File {
     }
 }
 
+impl From<String> for File {
+    fn from(file: String) -> Self {
+
+        match file.as_str() {
+            "a" => File::A,
+            "b" => File::B,
+            "c" => File::C,
+            "d" => File::D,
+            "e" => File::E,
+            "f" => File::F,
+            "g" => File::G,
+            "h" => File::H,
+            _ => unreachable!()
+        }
+    }
+}
+
 impl Default for File{
     fn default() -> Self {
         File::A
@@ -33,6 +50,13 @@ impl File {
 
     pub fn minus(&mut self){
         self.sub(1);
+    }
+}
+
+
+impl PartialEq for File {
+    fn eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 

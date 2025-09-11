@@ -9,7 +9,6 @@ edition = "2024"
 
 [dependencies]
 rand = "0.7.2"
-#cozy-chess = "0.3.4"
 
 [profile.release]
 opt-level = 3

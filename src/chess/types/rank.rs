@@ -20,6 +20,21 @@ impl From<u8> for Rank{
     }
 }
 
+impl From<String> for Rank{
+    fn from(rank: String) -> Self {
+        match rank.as_str() { 
+            "1" => Rank::First,
+            "2" => Rank::Second,
+            "3" => Rank::Third,
+            "4" => Rank::Fourth,
+            "5" => Rank::Fifth,
+            "6" => Rank::Sixth,
+            "7" => Rank::Seventh,
+            "8" => Rank::Eighth,
+            _ => unreachable!()
+        }
+    }
+}
 
 
 impl Rank {
@@ -39,12 +54,17 @@ impl Rank {
     }
 
     pub fn is_pawn_start(&self, color: Color) -> bool{
-
         match color {
             Color::White => { *self as u8 == 1 }
             Color::Black => { *self as u8 == 6 }
         }
-
+    }
+    
+    pub fn is_pawn_jump_end(&self, color: Color) -> bool{
+        match color {
+            Color::White => { *self as u8 == 3 }
+            Color::Black => { *self as u8 == 4 }
+        }
     }
 
     pub fn is_pawn_promotion(&self, color: Color) -> bool{

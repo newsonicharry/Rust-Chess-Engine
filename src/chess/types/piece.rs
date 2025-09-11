@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::mem;
 use crate::chess::types::color::Color;
-use crate::chess::types::piece::Piece::{BlackPawn, NoPiece, WhitePawn, WhiteRook};
+use crate::chess::types::piece::Piece::{BlackKing, BlackPawn, NoPiece, WhiteKing, WhitePawn, WhiteRook};
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -87,6 +87,18 @@ impl Piece{
 
     pub fn is_pawn(&self) -> bool {
         *self as u8 == WhitePawn as u8 || *self as u8 == BlackPawn as u8
+    }
+    
+    pub fn is_king(&self) -> bool{
+        *self as u8 == WhiteKing as u8 || *self as u8 == BlackKing as u8
+    }
+    
+    pub fn color(&self) -> Color {
+        if *self as u8 >= 6 { 
+            return Color::Black
+        }
+        
+        Color::White
     }
 }
 

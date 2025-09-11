@@ -10,6 +10,11 @@ pub const BUTTON_OPTION_TABLE: &[&str] = &[
 ];
 
 
+pub fn print_option_table(){
+
+}
+
+
 pub enum OptionType{
     Spin,
     Button,

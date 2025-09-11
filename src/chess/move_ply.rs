@@ -1,8 +1,11 @@
+use std::cmp::PartialEq;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
+use crate::chess::board::Board;
 use crate::chess::types::color::Color;
 use crate::chess::types::color::Color::Black;
+use crate::chess::types::square::Square::{C1, C8, E1, E8, G1, G8};
 
 const SQUARE_MASK: u16 = 0b111111;
 const TO_SHIFT: u8 = 6;
@@ -26,6 +29,7 @@ impl From<u16> for MovePly{
         MovePly{packed_data: data}
     }
 }
+
 
 impl MovePly{
     pub fn new(from: Square, to: Square, flag: MoveFlag) -> Self{
@@ -74,4 +78,49 @@ impl Display for MovePly {
         write!(f, "{}", final_str)
 
     }
+}
+
+pub fn uci_move_parser(played: String, board: &Board) -> MovePly{
+    let from = Square::from(played[0..2].to_string());
+    let to = Square::from(played[2..4].to_string());
+
+    let mut flag = MoveFlag::None;
+
+    if played.len() == 5{
+        let promotion_piece = played[4..].to_string();
+        match promotion_piece.as_str() {
+            "n" => MoveFlag::PromoteToKnight,
+            "b" => MoveFlag::PromoteToBishop,
+            "r" => MoveFlag::PromoteToRook,
+            "q" => MoveFlag::PromoteToQueen,
+            _=> unreachable!(),
+        };
+    }
+
+    let piece_type = board.piece_at(from);
+    let piece_color = piece_type.color();
+
+    if piece_type.is_pawn()  {
+        if from.rank().is_pawn_start(piece_color) && to.rank().is_pawn_jump_end(piece_color) {
+            flag = MoveFlag::DoubleJump;
+        }
+
+        if from.file() != to.file() && !board.piece_at(to).is_piece() {
+            flag = MoveFlag::EnPassantCapture;
+        }
+    }
+
+
+    if piece_type.is_king() {
+        if (from == E1 && to == G1) || (from == E8 && to == G8){
+            flag = MoveFlag::CastleShort;
+        }
+
+        if (from == E1 && to == C1) || (from == E8 && to == C8){
+            flag = MoveFlag::CastleLong;
+        }
+    }
+
+
+    MovePly::new(from, to, flag)
 }
