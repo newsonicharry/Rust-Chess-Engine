@@ -1,8 +1,8 @@
 
-// OPTION_NAME, RANGE, DEFAULT
-pub const SPIN_OPTION_TABLE: &[(&str, &str, &str)] = &[
-    ("Hash", "1-4096", "16"),
-    ("Threads", "1-1024", "1")
+// OPTION_NAME, MIN, MAX, DEFAULT
+pub const SPIN_OPTION_TABLE: &[(&str, u16, u16, u16)] = &[
+    ("Hash", 1, 32768, 16),
+    ("Threads", 1, 1024, 1)
 ];
 
 pub const BUTTON_OPTION_TABLE: &[&str] = &[
@@ -12,17 +12,13 @@ pub const BUTTON_OPTION_TABLE: &[&str] = &[
 
 pub fn print_option_table(){
 
-}
+    for (name, min, max, default) in SPIN_OPTION_TABLE {
+        println!("option name {name} type spin default {default} min {min} max {max}",)
+    }
 
-
-pub enum OptionType{
-    Spin,
-    Button,
-    NoType,
-}
-
-impl PartialEq<OptionType> for OptionType {
-    fn eq(&self, other: &OptionType) -> bool {
-        other == self
+    for name in BUTTON_OPTION_TABLE {
+        println!("option name {name} type button")
     }
 }
+
+

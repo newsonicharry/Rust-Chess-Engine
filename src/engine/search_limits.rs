@@ -21,7 +21,7 @@ impl SearchLimits {
         self.soft_stop <= self.timer.elapsed().as_millis() as u32
     }
 
-    pub fn hard_stop(&self) -> bool{
+    pub fn is_hard_stop(&self) -> bool{
         self.hard_stop <= self.timer.elapsed().as_millis() as u32
     }
     

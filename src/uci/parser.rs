@@ -1,10 +1,19 @@
 use std::str::FromStr;
 use crate::chess::move_ply::MovePly;
-use crate::uci::commands::Commands;
-use crate::uci::option_table::{SPIN_OPTION_TABLE, BUTTON_OPTION_TABLE, OptionType};
+use crate::uci::commands::{Commands, OptionsType};
+use crate::uci::option_table::{SPIN_OPTION_TABLE, BUTTON_OPTION_TABLE};
 pub struct UCIParser {}
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+#[derive(PartialEq)]
+enum OptionClassifier{
+    Spin,
+    Button,
+    NoType,
+}
+
+
 
 impl UCIParser {
 
@@ -44,7 +53,7 @@ impl UCIParser {
             },
         }
 
-        let option_name_wrapped = Self::collect_until_end_or_breakpoint(1, &split_message, Some("name"));
+        let option_name_wrapped = Self::collect_until_end_or_breakpoint(2, &split_message, Some("value"));
 
         if option_name_wrapped.is_err() {
             println!("Command setoption did not include the value for name");
@@ -52,23 +61,23 @@ impl UCIParser {
         }
 
         let option_name = option_name_wrapped.unwrap();
-        let mut option_type = OptionType::NoType;
+        let mut option_type = OptionClassifier::NoType;
 
         for item in SPIN_OPTION_TABLE.iter() {
-            if option_name == item.0 { option_type = OptionType::Spin }
+            if option_name == item.0 { option_type = OptionClassifier::Spin }
         }
 
         for item in BUTTON_OPTION_TABLE.iter() {
-            if option_name == *item { option_type = OptionType::Button }
+            if option_name == *item { option_type =  OptionClassifier::Button }
         }
 
 
-        if option_type == OptionType::NoType {
+        if option_type == OptionClassifier::NoType {
             println!("Command setoption of name '{option_name}' is not a valid option.");
             return Commands::IncorrectFormat;
         }
 
-        if option_type == OptionType::Spin {
+        if option_type == OptionClassifier::Spin {
             if !split_message.contains(&"value") {
                 println!("Command setoption of option type spin must include a value parameter.");
                 return Commands::IncorrectFormat;
@@ -84,11 +93,11 @@ impl UCIParser {
 
             let value = value_wrapped.unwrap();
 
-            return Commands::SetOption { name: option_name, option_type, value: Some(value) }
+            return Commands::SetOption { options_type: OptionsType::Spin{ name: option_name, value: u16::from_str(&value).unwrap() } }
         }
 
-        if option_type == OptionType::Button {
-            return Commands::SetOption { name: option_name, option_type: OptionType::Button, value: None }
+        if option_type == OptionClassifier::Button {
+            return Commands::SetOption { options_type: OptionsType::Button{ name: option_name} }
         }
 
         Commands::Unknown("The function failed".to_string())

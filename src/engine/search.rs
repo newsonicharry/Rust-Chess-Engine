@@ -28,7 +28,7 @@ fn search(
     limits: &SearchLimits,
 ) -> i16{
 
-    if limits.hard_stop() { return 0 }
+    if limits.is_hard_stop() { return 0 }
 
     let mut move_list = MoveList::default();
     MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
@@ -59,7 +59,6 @@ fn search(
 
     let mut node_type = TTFlag::Upper;
     let mut best_move = &move_list.move_at( 0);
-    let mut best_eval = -INFINITY;
 
 
     for cur_move in move_list.iter(){
@@ -69,13 +68,13 @@ fn search(
 
         let eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, tt, nnue, limits);
 
-        if limits.hard_stop() { return 0 }
+        if limits.is_hard_stop() { return 0 }
 
         board.undo_move();
         nnue.undo_move();
 
         if eval >= beta {
-            tt.update(board.zobrist(), *cur_move, eval, depth, TTFlag::Lower);
+            tt.update(board.zobrist(), *cur_move, beta, depth, TTFlag::Lower);
             return beta;
         }
         if eval > alpha {
@@ -90,9 +89,10 @@ fn search(
 
     if ply_searched == 0 {
         tt.best_move.store(best_move.packed_data(), Ordering::Relaxed);
+        tt.best_move_score.store(alpha, Ordering::Relaxed);
     }
 
-    tt.update(board.zobrist(), *best_move, best_eval, depth, node_type);
+    tt.update(board.zobrist(), *best_move, alpha, depth, node_type);
 
     alpha
 }
@@ -103,11 +103,10 @@ fn quiescence_search(
     depth: u8,
     mut alpha: i16,
     beta: i16,
-    // thread_data: &mut Thread,
     nnue: &mut NNUE,
     limits: &SearchLimits,
 ) -> i16{
-    if limits.hard_stop() { return 0 }
+    if limits.is_hard_stop() { return 0 }
 
 
     let eval = nnue.evaluate(board.side_to_move());
@@ -128,7 +127,7 @@ fn quiescence_search(
         board.make_move(cur_move);
 
         let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, nnue, limits);
-        if limits.hard_stop() { return 0 }
+        if limits.is_hard_stop() { return 0 }
 
         board.undo_move();
         nnue.undo_move();
@@ -154,16 +153,15 @@ fn iterative_deepening(
     for cur_depth in 1.. {
     
         search(board, 0, cur_depth, -INFINITY, INFINITY, tt, nnue, search_limits);
-        if search_limits.hard_stop() { break }
+        if search_limits.is_hard_stop() { break }
     
-        println!("info depth {}", cur_depth);
+        println!("info depth {} score cp {} time {}", cur_depth, tt.best_move_score.load(Ordering::Relaxed), search_limits.ms_elapsed());
     
         if search_limits.is_soft_stop() { break }
     }
 
-
     let best_move: MovePly = tt.best_move.load(Ordering::Relaxed).into();
-    println!("bestmove {}",  best_move);
+    println!("bestmove {}\n",  best_move);
 
 }
 
@@ -182,11 +180,8 @@ pub fn search_start(
 
     let mut handles = Vec::new();
     for _ in 0..num_threads {
-
-
         let tt_new = Arc::clone(&tt);
-
-
+        
         let handle = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
             let mut thread_board = board.clone();
             let mut thread_nnue = nnue.clone();

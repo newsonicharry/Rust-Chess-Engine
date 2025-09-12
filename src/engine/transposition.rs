@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU128, AtomicU16, Ordering};
+use std::sync::atomic::{AtomicI16, AtomicU128, AtomicU16, Ordering};
 use crate::chess::consts::MAX_MOVES;
 use crate::chess::move_ply::MovePly;
 use crate::engine::types::tt_flag::TTFlag;
@@ -9,6 +9,7 @@ const MOVE_SHIFT: u8 = 32;
 const EVAL_SHIFT: u8 = 16;
 const DEPTH_SHIFT: u8 = 8;
 const FLAG_SHIFT: u8 = 6;
+
 
 
 #[derive(Copy, Clone)]
@@ -49,6 +50,7 @@ pub struct Transposition {
     num_entries: u64,
     generation: u16,
 
+    pub best_move_score: AtomicI16,
     pub best_move: AtomicU16,
 }
 
@@ -59,12 +61,16 @@ impl Transposition {
         let max_num_entries = size_as_bytes / entry_size;
 
         let round_down_pow2 = 1 << (63 - max_num_entries.leading_zeros());
-        let entries: Vec<AtomicU128> = (0..round_down_pow2).map(|_| AtomicU128::new(0)).collect();
+
+        let default_entry= (i16::MIN as u16) as u128;
+
+        let entries: Vec<AtomicU128> = (0..round_down_pow2).map(|_| AtomicU128::new(default_entry)).collect();
         Self{
             entries: entries.into(),
             num_entries: round_down_pow2,
             generation: MAX_MOVES as u16,
-            best_move: AtomicU16::new(0)
+            best_move: AtomicU16::new(0),
+            best_move_score: AtomicI16::new(0),
         }
     }
 
@@ -96,7 +102,7 @@ impl Transposition {
         }
 
         let packed_data: u128 = ((zobrist as u128) << ZOBRIST_SHIFT)
-                                | ((score as u128) << SCORE_SHIFT)
+                                | (((score as u16) as u128) << SCORE_SHIFT)
                                 | ((cur_move.packed_data() as u128) << MOVE_SHIFT)
                                 | ((eval as u128) << EVAL_SHIFT)
                                 | ((depth as u128) << DEPTH_SHIFT)

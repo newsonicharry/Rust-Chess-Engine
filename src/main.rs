@@ -13,7 +13,8 @@ use crate::chess::types::color::Color;
 use crate::engine::search::search_start;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::Transposition;
-use crate::uci::commands::Commands;
+use crate::uci::commands::{Commands, OptionsType};
+use crate::uci::option_table::print_option_table;
 
 mod chess;
 mod general;
@@ -28,8 +29,11 @@ Commands are the same as the uci protocol, except perft which can be called by p
 Some UCI features are yet to be implemented.\
 ";
 
+const AUTHOR: &str = "Harry Phillips";
+const NAME: &str = "Generic Rust UCI Engine";
+
 fn main() {
-    println!("Generic Rust UCI Engine by slightly autistic teenager\n");
+    println!("{NAME} by {AUTHOR}\n");
 
     let mut current_fen: String = START_POS.to_string();
     let mut board = Board::default();
@@ -38,8 +42,8 @@ fn main() {
     let mut tt_size = 16;
     let mut tt = Arc::new(Transposition::new(tt_size));
 
-    let num_threads = 1;
-    
+    let mut num_threads = 1;
+
     loop {
         let mut input: String = String::new();
         std::io::stdin().read_line(&mut input).expect("Failed to read input line.");
@@ -47,7 +51,12 @@ fn main() {
         let uci_command = parser::UCIParser::parse(&input);
 
         match uci_command {
-            Commands::Uci => println!("uciok"),
+            Commands::Uci => {
+                println!("id name {NAME}\nid author {AUTHOR}\n");
+                print_option_table();
+                println!("uciok");
+
+            },
             Commands::IsReady => println!("readyok"),
             Commands::Quit => exit(1),
 
@@ -98,14 +107,31 @@ fn main() {
                 }else {
                     soft_think_time = (hard_think_time as f64 * 0.6f64) as u32;
                 }
-                
+
                 let search_limits = SearchLimits::new(hard_think_time, soft_think_time);
                 search_start(num_threads, board, &tt, search_limits);
             }
-            
-            Commands::SetOption {option_type, value, name} => {
-       
-                
+
+            Commands::SetOption {options_type} => {
+                match options_type {
+                    OptionsType::Spin { name, value } => {
+                        match name.as_str() {
+                            "Threads" => { num_threads = value as usize }
+                            "Hash" => { tt_size = value;  tt = Arc::new(Transposition::new(tt_size)); }
+                            _ => unreachable!()
+                        }
+
+                    }
+
+                    OptionsType::Button { name } => {
+                        match name.as_str() {
+                            "Clear Hash" => { tt = Arc::new(Transposition::new(tt_size)); }
+                            _ => unreachable!()
+                        }
+                    }
+
+                }
+
             }
 
             Commands::Unknown(line) =>  println!("Unknown command: '{line}'. Type help for more information."),
