@@ -19,10 +19,12 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
     pub fn generate(board: &mut Board, move_list: &mut MoveList) {
         board.update_occupancy();
         let (pieces_checking, allowed_squares) = Self::get_check_data(board);
-        
+
         let mut pin_ray_mask: [u64; NUM_SQUARES] = [u64::MAX; NUM_SQUARES];
         let pinned_pieces_mask = Self::get_pins(board, &mut pin_ray_mask);
 
+        if pieces_checking != 0 { board.set_in_check(true); }
+        else { board.set_in_check(false); }
 
         Self::update_pawn_moves(board, move_list, allowed_squares, &pin_ray_mask);
         Self::update_knight_moves(board, move_list, allowed_squares, pinned_pieces_mask);

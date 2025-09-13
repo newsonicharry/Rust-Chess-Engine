@@ -2,20 +2,18 @@ use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS};
 use crate::chess::move_list::MoveList;
+use crate::chess::move_ply::MovePly;
+use crate::chess::types::color::Color::White;
 use crate::engine::arbiter::Arbiter;
 use crate::engine::eval::nnue::NNUE;
 use crate::engine::search_limits::SearchLimits;
+use crate::engine::thread::ThreadData;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::thread;
-use std::time::Instant;
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::color::Color::White;
-use crate::chess::types::square::Square;
-use crate::engine::thread::ThreadData;
+use crate::chess::types::piece::BasePiece::{King, Pawn};
 
 const PIECE_VALUES: [i16; 12] = [100, 320, 320, 500, 1000, 10000, 100, 320, 320, 500, 1000, 10000];
 
@@ -36,16 +34,6 @@ fn search(
 
     if limits.is_hard_stop() { return 0 }
 
-    let mut move_list = MoveList::default();
-    MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
-
-    let match_result = Arbiter::arbitrate(board, &move_list);
-    match match_result {
-        MatchResult::Draw => {return 0},
-        MatchResult::Loss => {return -INFINITY + ply_searched as i16},
-        MatchResult::NoResult => {},
-    }
-
     let tt_entry = tt.probe(board.zobrist());
     if let Some(entry) = tt_entry {
         if entry.depth >= depth{
@@ -57,8 +45,45 @@ fn search(
         }
     }
 
-    if depth <= 0{
+    let mut move_list = MoveList::default();
+    MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
+
+    let match_result = Arbiter::arbitrate(board, &move_list);
+    match match_result {
+        MatchResult::Draw => {return 0},
+        MatchResult::Loss => {return -INFINITY + ply_searched as i16},
+        MatchResult::NoResult => {},
+    }
+
+
+    if depth == 0{
         return quiescence_search(board, ply_searched+1, 8, alpha, beta, nnue, limits)
+    }
+
+
+    let pv_node = alpha != beta - 1;
+
+    if !pv_node && depth > 6 && !board.in_check() && !in_zugzwang(board){
+
+        board.make_null_move();
+        let value = -search(board, ply_searched+1, depth-4, -beta, -(beta - 1), thread_data, tt, nnue, limits);
+        if limits.is_hard_stop() { return 0 }
+        board.undo_null_move();
+
+        if value >= beta{
+            return beta;
+        }
+    }
+
+    let static_eval;
+    if tt_entry.is_some() {
+        static_eval = tt_entry.unwrap().eval;
+    }else {
+        static_eval = nnue.evaluate(board.side_to_move());
+    }
+
+    if static_eval >= (beta + 80 * depth as i16) {
+        return beta;
     }
 
     order_moves(board, &mut move_list, &tt_entry, &thread_data, ply_searched);
@@ -92,6 +117,7 @@ fn search(
         if eval >= beta {
             tt.update(board.zobrist(), *cur_move, beta, depth, TTFlag::Lower);
             thread_data.killers.update(*cur_move, ply_searched);
+            thread_data.history_heuristics.update_history(*cur_move);
             return beta;
         }
         if eval > alpha {
@@ -113,6 +139,16 @@ fn search(
 
     alpha
 }
+
+fn in_zugzwang(board: &Board) -> bool {
+    let king_pawn_occupancy = board.bitboard_combined(Pawn) | board.bitboard_combined(King);
+    if board.occupancy() == king_pawn_occupancy {
+        return true;
+    }
+
+    false
+}
+
 
 fn quiescence_search(
     board: &mut Board,
@@ -223,6 +259,8 @@ fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<
         if flag.is_castles() {
             move_values[i] += 1000;
         }
+
+        move_values[i] += thread_data.history_heuristics.get_history(*cur_move) as i16;
 
     }
 

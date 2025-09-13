@@ -13,6 +13,7 @@ pub struct BoardState{
     pub en_passant_file: File,
     pub can_en_passant: bool,
     pub zobrist: u64,
+    pub in_check: bool,
 }
 
 impl Default for BoardState {
@@ -25,6 +26,7 @@ impl Default for BoardState {
             en_passant_file: File::default(),
             can_en_passant: false,
             zobrist: 0,
+            in_check: false,
         }
     }
 }

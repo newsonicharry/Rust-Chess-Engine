@@ -40,6 +40,7 @@ pub struct Board{
     castling_rights: u8,
     half_move_clock: u8,
     zobrist: u64,
+    in_check: bool,
 
     board_states: [BoardState; MAX_MOVES],
     cur_board_state: usize
@@ -64,6 +65,7 @@ impl Default for Board {
             castling_rights: 0,
             half_move_clock: 0,
             zobrist: 0,
+            in_check: false,
 
             board_states: [BoardState::default(); MAX_MOVES],
             cur_board_state: 0,
@@ -116,6 +118,13 @@ impl Board{
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
+    pub fn set_in_check(&mut self, in_check: bool){
+        self.in_check = in_check;
+    }
+
+    pub fn in_check(&self) -> bool {
+        self.in_check
+    }
 
     pub fn orthogonal_bitboard_them(&self) -> u64{
         match self.side_to_move {
@@ -138,10 +147,6 @@ impl Board{
 
     pub fn bitboard_combined(&self, piece: BasePiece) -> u64{
         self.bitboards[piece as usize].0 | self.bitboards[piece as usize + 6].0
-    }
-
-    pub fn piece_list(&self, piece: Piece) -> &[Square] {
-        &self.piece_lists[piece as usize].indexes()
     }
 
     pub fn piece_list_us(&self, base_piece: BasePiece) -> &[Square]{
@@ -252,6 +257,7 @@ impl Board{
             en_passant_file: self.en_passant_file,
             can_en_passant: self.can_en_passant,
             zobrist: self.zobrist,
+            in_check: self.in_check,
         };
         self.cur_board_state += 1;
     }
@@ -446,6 +452,7 @@ impl Board{
         self.can_en_passant = last_board_state.can_en_passant;
         self.half_move_clock = last_board_state.half_move_clock;
         self.zobrist = last_board_state.zobrist;
+        self.in_check = last_board_state.in_check;
 
         self.side_to_move = !self.side_to_move;
 
@@ -468,6 +475,26 @@ impl Board{
     }
 
 
+    pub fn make_null_move(&mut self){
+        self.push_board_state(MovePly::default(), NoPiece);
+        self.zobrist ^= ZOBRIST.side_to_move();
+        self.side_to_move = !self.side_to_move;
+
+    }
+
+    pub fn undo_null_move(&mut self){
+        let last_board_state = unsafe { self.board_states[self.cur_board_state-1] };
+
+        self.castling_rights = last_board_state.castling_rights;
+        self.en_passant_file = last_board_state.en_passant_file;
+        self.can_en_passant = last_board_state.can_en_passant;
+        self.half_move_clock = last_board_state.half_move_clock;
+        self.zobrist = last_board_state.zobrist;
+        self.in_check = last_board_state.in_check;
+
+        self.cur_board_state -= 1;
+        self.side_to_move = !self.side_to_move;
+    }
 
 }
 
