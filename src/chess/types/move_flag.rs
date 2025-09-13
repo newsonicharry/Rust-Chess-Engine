@@ -60,4 +60,12 @@ impl MoveFlag {
             _ => false,
         }
     }
+
+    pub fn is_castles(&self) -> bool{
+        match self {
+            MoveFlag::CastleLong => true,
+            MoveFlag::CastleShort => true,
+            _ => false,
+        }
+    }
 }

@@ -4,6 +4,8 @@ pub const NUM_FILES: usize = 8;
 pub const NUM_RANKS: usize = 8;
 
 pub const MAX_MOVES: usize = 1024;
+pub const MAX_DEPTH: usize = 256;
+
 
 pub const KNIGHT_DIRECTIONS: [(i8,i8); 8] = [(-2, 1), (-1, 2), (1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1)];
 pub const BISHOP_DIRECTIONS: [(i8,i8); 4] = [(1, 1), (-1, 1), (-1, -1), (1, -1)];

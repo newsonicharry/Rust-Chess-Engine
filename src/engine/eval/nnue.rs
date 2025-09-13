@@ -27,7 +27,8 @@ impl Default for NNUE {
 }
 
 impl NNUE {
-    pub fn new(&mut self, board: &Board){
+    pub fn new(&mut self, board: &mut Board){
+        board.update_occupancy();
         let squares_with_pieces = bits::all_squares(board.occupancy());
         for square in squares_with_pieces {
             let piece = board.piece_at(square);

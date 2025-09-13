@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::slice::Iter;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -10,7 +11,6 @@ use crate::general::bits;
 pub struct MoveList{ 
     moves: [MovePly; 256],
     move_count: usize,
-    index: usize,
 }
 
 
@@ -19,7 +19,6 @@ impl Default for MoveList {
         MoveList{
             moves: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
             move_count: 0,
-            index: 0,
         }
     }
 }
@@ -51,9 +50,6 @@ impl MoveList {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.move_count = 0;
-    }
 
     pub fn move_count(&self) -> usize {
         self.move_count
@@ -68,6 +64,21 @@ impl MoveList {
         self.moves[..self.move_count].iter()
 
         
+    }
+
+    pub fn order_moves(&mut self, orderings: &[i16; 256]){
+        let mut indices = [0usize; 256];
+        for i in 0..self.move_count {
+            indices[i] = i;
+        }
+
+        indices[..self.move_count].sort_unstable_by_key(|&i| Reverse(orderings[i]));
+
+        let original_copy = self.moves;
+
+        for (j, &i) in indices[..self.move_count].iter().enumerate() {
+            self.moves[j] = original_copy[i];
+        }
     }
 
 

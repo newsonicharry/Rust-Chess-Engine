@@ -49,7 +49,6 @@ fn main() {
         std::io::stdin().read_line(&mut input).expect("Failed to read input line.");
 
         let uci_command = parser::UCIParser::parse(&input);
-
         match uci_command {
             Commands::Uci => {
                 println!("id name {NAME}\nid author {AUTHOR}\n");
@@ -83,7 +82,7 @@ fn main() {
             Commands::Go { move_time, wtime, btime, winc, binc, moves_to_go} => {
 
                 let mut hard_think_time: u32 = 1000;
-                let mut soft_think_time: u32 = 1000;
+                let soft_think_time;
 
 
                 let mut moves_left: u32 = 20;
@@ -200,5 +199,5 @@ fn perft(board: &mut Board, depth: u8){
 
     println!("\nNodes searched: {all_nodes}");
     println!("Nodes per second: {nodes_per_second}");
-    println!("Seconds elapsed: {elapsed}");
+    println!("Seconds elapsed: {elapsed}\n");
 }

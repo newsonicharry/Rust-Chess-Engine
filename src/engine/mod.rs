@@ -6,3 +6,5 @@ mod info;
 pub mod transposition;
 mod arbiter;
 mod types;
+mod killers;
+mod history_heuristics;

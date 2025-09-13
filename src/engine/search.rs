@@ -13,6 +13,12 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::thread;
 use std::time::Instant;
 use crate::chess::move_ply::MovePly;
+use crate::chess::types::color::Color::White;
+use crate::chess::types::square::Square;
+use crate::engine::thread::ThreadData;
+
+const PIECE_VALUES: [i16; 12] = [100, 320, 320, 500, 1000, 10000, 100, 320, 320, 500, 1000, 10000];
+
 
 const INFINITY: i16 = 30000;
 
@@ -22,7 +28,7 @@ fn search(
     depth: u8,
     mut alpha: i16,
     beta: i16,
-    // thread_data: &mut Thread,
+    thread_data: &mut ThreadData,
     tt: &Transposition,
     nnue: &mut NNUE,
     limits: &SearchLimits,
@@ -55,18 +61,28 @@ fn search(
         return quiescence_search(board, ply_searched+1, 8, alpha, beta, nnue, limits)
     }
 
-    order_moves(board, &mut move_list, &tt_entry);
+    order_moves(board, &mut move_list, &tt_entry, &thread_data, ply_searched);
 
     let mut node_type = TTFlag::Upper;
-    let mut best_move = &move_list.move_at( 0);
+    let mut best_move = move_list.move_at( 0);
 
 
-    for cur_move in move_list.iter(){
+    for (i, cur_move) in move_list.iter().enumerate(){
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
+        let mut eval;
 
-        let eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, tt, nnue, limits);
+        if i >= 3 && depth >= 3 {
+            eval = -search(board, ply_searched+1, depth-2, -alpha - 1, -alpha, thread_data, tt, nnue, limits);
+
+            if eval > alpha {
+                eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, tt, nnue, limits);
+            }
+        }else {
+            eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, tt, nnue, limits);
+        }
+
 
         if limits.is_hard_stop() { return 0 }
 
@@ -75,12 +91,13 @@ fn search(
 
         if eval >= beta {
             tt.update(board.zobrist(), *cur_move, beta, depth, TTFlag::Lower);
+            thread_data.killers.update(*cur_move, ply_searched);
             return beta;
         }
         if eval > alpha {
             alpha = eval;
             node_type = TTFlag::Exact;
-            best_move = cur_move;
+            best_move = *cur_move;
         }
 
 
@@ -92,7 +109,7 @@ fn search(
         tt.best_move_score.store(alpha, Ordering::Relaxed);
     }
 
-    tt.update(board.zobrist(), *best_move, alpha, depth, node_type);
+    tt.update(board.zobrist(), best_move, alpha, depth, node_type);
 
     alpha
 }
@@ -149,10 +166,12 @@ fn iterative_deepening(
     nnue: &mut NNUE,
     search_limits: &SearchLimits
     ){
-    
+
+    let mut thread_data = ThreadData::default();
+
     for cur_depth in 1.. {
     
-        search(board, 0, cur_depth, -INFINITY, INFINITY, tt, nnue, search_limits);
+        search(board, 0, cur_depth, -INFINITY, INFINITY, &mut thread_data, tt, nnue, search_limits);
         if search_limits.is_hard_stop() { break }
     
         println!("info depth {} score cp {} time {}", cur_depth, tt.best_move_score.load(Ordering::Relaxed), search_limits.ms_elapsed());
@@ -165,35 +184,83 @@ fn iterative_deepening(
 
 }
 
-pub fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<TTEntry>){
+
+
+fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<TTEntry>, thread_data: &ThreadData, ply_searched: u8) {
+
+    let mut move_values: [i16; 256] = [0; 256];
+
+
+    for (i, cur_move) in move_list.iter().enumerate(){
+        let from = cur_move.from();
+        let to = cur_move.to();
+        let flag = cur_move.flag();
+
+        let piece = board.piece_at(from);
+        let capture = board.piece_at(to);
+
+
+        if let Some(entry) = prev_best_move {
+            if entry.cur_move == *cur_move {
+                move_values[i] = INFINITY;
+                continue;
+            }
+        }
+
+        if thread_data.killers.contains(ply_searched, *cur_move) {
+            move_values[i] += 5000;
+        }
+
+        // will replace later with a proper SEE implementation
+        if capture.is_piece() {
+            move_values[i] += 5 * PIECE_VALUES[capture as usize] - PIECE_VALUES[piece as usize];
+        }
+
+        if flag.is_promotion(){
+            move_values[i] +=  PIECE_VALUES[flag.promotion_piece(White) as usize];
+        }
+
+        if flag.is_castles() {
+            move_values[i] += 1000;
+        }
+
+    }
+
+    move_list.order_moves(&move_values);
 
 }
 
 pub fn search_start(
     num_threads: usize,
-    board: Board,
+    mut board: Board,
     tt: &Arc<Transposition>,
     search_limits: SearchLimits){
 
     let mut nnue = NNUE::default();
-    nnue.new(&board);
+    nnue.new(&mut board);
 
-    let mut handles = Vec::new();
-    for _ in 0..num_threads {
-        let tt_new = Arc::clone(&tt);
-        
-        let handle = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
-            let mut thread_board = board.clone();
-            let mut thread_nnue = nnue.clone();
-            iterative_deepening(&mut thread_board, &tt_new, &mut thread_nnue, &search_limits);
-        });
+    let mut thread_board = board.clone();
 
-        handles.push(handle.unwrap());
-    }
+    let tt_new = Arc::clone(&tt);
 
+    iterative_deepening(&mut thread_board, &tt_new, &mut nnue, &search_limits);
 
-    for handle in handles {
-
-        handle.join().unwrap();
-    }
+    // let mut handles = Vec::new();
+    // for _ in 0..num_threads {
+    //     let tt_new = Arc::clone(&tt);
+    //
+    //     let handle = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
+    //         let mut thread_board = board.clone();
+    //         let mut thread_nnue = nnue.clone();
+    //         iterative_deepening(&mut thread_board, &tt_new, &mut thread_nnue, &search_limits);
+    //     });
+    //
+    //     handles.push(handle.unwrap());
+    // }
+    //
+    //
+    // for handle in handles {
+    //
+    //     handle.join().unwrap();
+    // }
 }

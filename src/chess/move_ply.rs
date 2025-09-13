@@ -12,6 +12,7 @@ const TO_SHIFT: u8 = 6;
 const FLAG_SHIFT: u8 = 12;
 
 #[derive(Clone, Copy)]
+#[derive(PartialEq)]
 pub struct MovePly{
     //   flag   to    from
     // 0b1111 111111 111111
@@ -56,6 +57,8 @@ impl MovePly{
     pub fn packed_data(&self) -> u16{
         self.packed_data
     }
+    
+    pub fn is_default(&self) -> bool{ self.packed_data == 0 }
 }
 
 impl Display for MovePly {
