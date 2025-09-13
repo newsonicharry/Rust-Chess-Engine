@@ -3,6 +3,7 @@ use crate::chess::bitboard::Bitboard;
 
 #[repr(u8)]
 #[derive(Copy, Clone)]
+#[derive(PartialEq)]
 pub enum File{
     A, B, C, D, E, F, G, H
 }
@@ -53,12 +54,6 @@ impl File {
     }
 }
 
-
-impl PartialEq for File {
-    fn eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
 
 
 impl Display for File {

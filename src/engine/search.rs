@@ -272,7 +272,7 @@ pub fn search_start(
     num_threads: usize,
     mut board: Board,
     tt: &Arc<Transposition>,
-    search_limits: SearchLimits){
+    search_limits: &SearchLimits){
 
     let mut nnue = NNUE::default();
     nnue.new(&mut board);

@@ -134,7 +134,7 @@ impl UCIParser {
         }
 
 
-        let moves_position_wrapped = split_message.iter().position(|&x| x == "value");
+        let moves_position_wrapped = split_message.iter().position(|&x| x == "moves");
         if moves_position_wrapped.is_none() {
             return Commands::Position { fen: fen.to_string(), moves: None};
         }
@@ -147,7 +147,7 @@ impl UCIParser {
 
         }
 
-        let moves = Some(split_message[moves_position..].iter().map(|x| x.to_string()).collect::<Vec<String>>());
+        let moves = Some(split_message[moves_position+1..].iter().map(|x| x.to_string()).collect::<Vec<String>>());
 
         Commands::Position { fen: fen.to_string(), moves}
     }

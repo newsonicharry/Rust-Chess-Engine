@@ -1,23 +1,20 @@
 #![feature(integer_atomics)]
 
-use std::process::exit;
-use std::sync::Arc;
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_list::MoveList;
-use crate::uci::parser;
-use std::time::Instant;
 use crate::chess::move_ply;
-use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
-use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::square::Square;
 use crate::engine::search::search_start;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::Transposition;
 use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
+use crate::uci::parser;
+use std::process::exit;
+use std::sync::Arc;
+use std::time::Instant;
 
 mod chess;
 mod general;
@@ -41,19 +38,6 @@ fn main() {
     let mut current_fen: String = START_POS.to_string();
     let mut board = Board::default();
     board.new(&current_fen);
-
-
-    // let mut list = MoveList::default();
-    // MoveGenerator::<GEN_ALL>::generate(&mut board, &mut list);
-    // for cur_move in list.iter() {
-    //     println!("{}", cur_move);
-    // }
-    // board.make_move(&MovePly::new(Square::E2, Square::E4, MoveFlag::None));
-    // board.make_null_move();
-    // board.make_move(&MovePly::new(Square::D2, Square::D4, MoveFlag::None));
-    // board.undo_move();
-    // board.undo_null_move();
-    // board.undo_move();
 
     let mut tt_size = 16;
     let mut tt = Arc::new(Transposition::new(tt_size));
@@ -87,6 +71,7 @@ fn main() {
 
             Commands::Position {fen, moves } => {
                 current_fen = fen;
+                board = Board::default();
                 board.new(&current_fen);
                 if let Some(str_moves) = moves{
                     for str_move in str_moves{
@@ -124,7 +109,7 @@ fn main() {
                 }
 
                 let search_limits = SearchLimits::new(hard_think_time, soft_think_time);
-                search_start(num_threads, board, &tt, search_limits);
+                search_start(num_threads, board, &tt, &search_limits);
             }
 
             Commands::SetOption {options_type} => {

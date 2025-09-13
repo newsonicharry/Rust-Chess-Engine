@@ -32,7 +32,7 @@ impl From<u8> for Square{
 impl From<String> for Square{
     fn from(square: String) -> Self {
         let file = File::from(square.chars().collect::<Vec<_>>()[0].to_string());
-        let rank =Rank::from(square.chars().collect::<Vec<_>>()[0].to_string());
+        let rank = Rank::from(square.chars().collect::<Vec<_>>()[1].to_string());
         
         Square::from((file, rank))
     }
