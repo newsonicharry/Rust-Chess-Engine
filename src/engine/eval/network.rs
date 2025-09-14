@@ -1,7 +1,7 @@
 use std::mem;
 
 pub const NUM_FEATURES: usize = 768;
-pub const HIDDEN_SIZE: usize = 256;
+pub const HIDDEN_SIZE: usize = 1024;
 
 pub const CR_MIN: i32 = 0;
 pub const CR_MAX: i32 = 255;
@@ -21,4 +21,4 @@ pub struct Network {
     pub output_bias: i16,
 }
 
-pub static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./bins/quantised_256.bin")) };
+pub static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./bins/net.bin")) };

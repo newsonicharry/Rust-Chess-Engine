@@ -12,6 +12,8 @@ use crate::engine::transposition::Transposition;
 use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
 use crate::uci::parser;
+use rand::Rng;
+use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
 use std::time::Instant;
@@ -202,3 +204,51 @@ fn perft(board: &mut Board, depth: u8){
     println!("Nodes per second: {nodes_per_second}");
     println!("Seconds elapsed: {elapsed}\n");
 }
+
+// test code in case i need to check if something is broken
+// pub fn run_self_play(){
+//
+//     let mut fen_file = File::open("C:/Users/Harry/Desktop/UHO_2022_8mvs_+110_+119.epd").unwrap();
+//     let mut string = String::new();
+//     fen_file.read_to_string(&mut string).unwrap();
+//     let all_fens = string.split("\n").collect::<Vec<&str>>();
+//
+//     for fen in all_fens {
+//         let mut tt = Arc::new(Transposition::new(16));
+//
+//         let mut uci_moves_played: Vec<String> = Vec::new();
+//         println!("fen: {fen}");
+//         loop{
+//             let mut board = Board::default();
+//             board.new(fen);
+//             // board.new(START_POS);
+//
+//             for uci_move in &uci_moves_played {
+//                 board.make_move(&move_ply::uci_move_parser(uci_move.to_string(), &board));
+//             }
+//             println!("{board}");
+//
+//             let mut nnue = NNUE::default();
+//             nnue.new(&mut board);
+//
+//             let mut valid_moves = MoveList::default();
+//             MoveGenerator::<GEN_ALL>::generate(&mut board, &mut valid_moves);
+//
+//             let match_result = Arbiter::arbitrate(&mut board, &mut valid_moves);
+//             match match_result {
+//                 MatchResult::Loss | MatchResult::Draw => {break}
+//                 MatchResult::NoResult => {}
+//             }
+//
+//             let move_played = iterative_deepening(&mut board, &tt, &mut nnue, &SearchLimits::new(100, 100));
+//             uci_moves_played.push(move_played.to_string());
+//             // println!("{move_played}");
+//
+//         }
+//
+//
+//     }
+//     println!("{}", string);
+//
+//
+// }

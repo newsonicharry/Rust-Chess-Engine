@@ -140,6 +140,13 @@ impl Board{
         }
     }
 
+    pub fn bitboard(&self, base_piece: BasePiece, color: Color) -> u64{
+        match color {
+            Color::White => self.bitboards[base_piece as usize].0,
+            Color::Black => self.bitboards[base_piece as usize + 6].0,
+        }
+    }
+
     pub fn bitboard_them(&self, base_piece: BasePiece) -> u64{
         let piece = Piece::from((base_piece, !self.side_to_move));
         self.bitboards[piece as usize].0
@@ -219,7 +226,7 @@ impl Board{
     
     pub fn past_board_states(&self) -> Option<&[BoardState]>{
         if self.cur_board_state > 0 {
-         return Some(&self.board_states[..(self.cur_board_state-1).max(0)])
+            return Some(&self.board_states[..(self.cur_board_state-1)])
         }
 
         None

@@ -22,6 +22,10 @@ impl Arbiter{
 
     }
 
+    pub fn is_draw(board: &Board) -> bool {
+        Self::is_fifty_move_rule(board) || Self::is_insufficient_material(board) || Self::is_three_fold(board)
+    }
+
     fn is_stalemate(move_list: &MoveList) -> bool {
         move_list.move_count() == 0
     }
@@ -95,9 +99,11 @@ impl Arbiter{
         }
 
         for past_board_state in past_states.unwrap().iter().rev() {
-            *position_count.entry(past_board_state.zobrist).or_insert(1) += 1;
+            *position_count.entry(past_board_state.zobrist).or_insert(0) += 1;
 
-            if *position_count.entry(past_board_state.zobrist).key() == 3 {
+            if *position_count.get(&past_board_state.zobrist).unwrap() == 3 {
+                // println!("the zobrist of {} made it ture", past_board_state.zobrist);
+                // println!("{:?}", position_count);
                 return true;
             }
 
@@ -105,7 +111,7 @@ impl Arbiter{
                 return false;
             }
         }
-
         false
     }
+
 }

@@ -22,7 +22,7 @@ impl UCIParser {
         let mut final_str = "".to_string();
 
         for i in start_index..split_messages.len() {
-            let section = *split_messages.get(i).unwrap();
+            let section = (*split_messages.get(i).unwrap()).to_owned() + " ";
 
             if let Some(break_point) = break_point {
                 if section == break_point {
@@ -31,14 +31,15 @@ impl UCIParser {
             }
 
 
-            final_str.push_str(section);
+            final_str.push_str(&*section);
         }
 
         if final_str == "" {
             return Err(())
         }
 
-        Ok(final_str.to_string())
+        final_str = final_str[0..final_str.len()-1].to_string();
+        Ok(final_str)
     }
 
     fn parse_set_option(split_message: Vec<&str>) -> Commands {
@@ -109,7 +110,7 @@ impl UCIParser {
 
         match split_message.get(1) {
             Some(&"fen") =>  {
-                let unwrapped_fen = Self::collect_until_end_or_breakpoint(0, &split_message, Some("moves"));
+                let unwrapped_fen = Self::collect_until_end_or_breakpoint(2, &split_message, Some("moves"));
 
                 if unwrapped_fen.is_err() {
                     println!("Command position did not include a fen for the fen parameter.");

@@ -118,6 +118,11 @@ pub enum BasePiece{
 
 const BASE_PIECES: [BasePiece; 6] = [BasePiece::Pawn, BasePiece::Knight, BasePiece::Bishop, BasePiece::Rook, BasePiece::Queen, BasePiece::King];
 
+impl From<Piece> for BasePiece {
+    fn from(piece: Piece) -> Self {
+        unsafe { mem::transmute(piece as u8) }
+    }
+}
 
 impl BasePiece{
     pub fn iterator() -> impl Iterator<Item = BasePiece> {

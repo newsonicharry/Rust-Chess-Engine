@@ -88,14 +88,13 @@ pub fn uci_move_parser(played: String, board: &Board) -> MovePly{
     let to = Square::from(played[2..4].to_string());
 
     let mut flag = MoveFlag::None;
-
     if played.len() == 5{
         let promotion_piece = played[4..].to_string();
         match promotion_piece.as_str() {
-            "n" => MoveFlag::PromoteToKnight,
-            "b" => MoveFlag::PromoteToBishop,
-            "r" => MoveFlag::PromoteToRook,
-            "q" => MoveFlag::PromoteToQueen,
+            "n" => flag = MoveFlag::PromoteToKnight,
+            "b" => flag = MoveFlag::PromoteToBishop,
+            "r" => flag = MoveFlag::PromoteToRook,
+            "q" => flag = MoveFlag::PromoteToQueen,
             _=> unreachable!(),
         };
     }

@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::ops::Not;
 
 #[repr(u8)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Color{
     White,
     Black,

@@ -4,6 +4,7 @@ use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS};
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color::White;
+use crate::chess::consts::PIECE_VALUES;
 use crate::engine::arbiter::Arbiter;
 use crate::engine::eval::nnue::NNUE;
 use crate::engine::search_limits::SearchLimits;
@@ -13,17 +14,16 @@ use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::thread;
 use crate::chess::types::piece::BasePiece::{King, Pawn};
-
-const PIECE_VALUES: [i16; 12] = [100, 320, 320, 500, 1000, 10000, 100, 320, 320, 500, 1000, 10000];
-
+use crate::engine::see::see;
 
 const INFINITY: i16 = 30000;
 
 fn search(
     board: &mut Board,
     ply_searched: u8,
-    depth: u8,
+    mut depth: u8,
     mut alpha: i16,
     beta: i16,
     thread_data: &mut ThreadData,
@@ -35,7 +35,7 @@ fn search(
     if limits.is_hard_stop() { return 0 }
 
     let tt_entry = tt.probe(board.zobrist());
-    if let Some(entry) = tt_entry {
+    if let Some(entry) = tt_entry && ply_searched > 0 {
         if entry.depth >= depth{
             match entry.tt_flag{
                 TTFlag::Exact => {return entry.eval},
@@ -55,6 +55,7 @@ fn search(
         MatchResult::NoResult => {},
     }
 
+    if board.in_check() { depth += 1; }
 
     if depth == 0{
         return quiescence_search(board, ply_searched+1, 8, alpha, beta, nnue, limits)
@@ -174,8 +175,15 @@ fn quiescence_search(
     let mut move_list = MoveList::default();
     MoveGenerator::<GEN_TACTICS>::generate(board, &mut move_list);
 
+    if Arbiter::is_draw(board) {
+        return 0
+    }
 
     for cur_move in move_list.iter(){
+        // if see(cur_move.from(), cur_move.to(), board).is_negative() {
+        //     continue;
+        // }
+
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
@@ -196,12 +204,12 @@ fn quiescence_search(
     alpha
 }
 
-fn iterative_deepening(
+pub fn iterative_deepening(
     board: &mut Board,
     tt: &Transposition,
     nnue: &mut NNUE,
     search_limits: &SearchLimits
-    ){
+    ) -> MovePly{
 
     let mut thread_data = ThreadData::default();
 
@@ -216,7 +224,7 @@ fn iterative_deepening(
     }
 
     let best_move: MovePly = tt.best_move.load(Ordering::Relaxed).into();
-    println!("bestmove {}\n",  best_move);
+    best_move
 
 }
 
@@ -281,16 +289,18 @@ pub fn search_start(
 
     let tt_new = Arc::clone(&tt);
 
-    iterative_deepening(&mut thread_board, &tt_new, &mut nnue, &search_limits);
+    let best_move = iterative_deepening(&mut thread_board, &tt_new, &mut nnue, &search_limits);
+    println!("bestmove {}\n",  best_move);
 
+    // let limits = search_limits.clone();
     // let mut handles = Vec::new();
-    // for _ in 0..num_threads {
+    // for _ in 0..8 {
     //     let tt_new = Arc::clone(&tt);
     //
-    //     let handle = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
+    //     let handle = thread::Builder::new().stack_size(32 * 1024 * 1024).name("eiei".to_string()).spawn(move || {
     //         let mut thread_board = board.clone();
     //         let mut thread_nnue = nnue.clone();
-    //         iterative_deepening(&mut thread_board, &tt_new, &mut thread_nnue, &search_limits);
+    //         iterative_deepening(&mut thread_board, &tt_new, &mut thread_nnue, &limits);
     //     });
     //
     //     handles.push(handle.unwrap());

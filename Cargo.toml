@@ -14,6 +14,6 @@ rand = "0.7.2"
 opt-level = 3
 lto = "thin"
 rustflags = [
-    "-C", "link-arg=-Wl,--stack,8000000",
+    "-C", "link-arg=-Wl,--stack,64000000",
     "-C", "target-cpu=native"
 ]
