@@ -360,7 +360,7 @@ impl Board{
 
     fn reverse_quiet(&mut self, played: MovePly){
         let to = played.to();
-        self.move_piece::<INCREMENT_ZOBRIST>(self.piece_at(to), to, played.from())
+        self.move_piece::<IGNORE_ZOBRIST>(self.piece_at(to), to, played.from())
     }
 
     fn reverse_short_castle(&mut self){

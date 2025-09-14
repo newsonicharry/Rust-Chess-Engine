@@ -59,7 +59,7 @@ impl MoveList {
         self.moves[index]
     }
 
-    pub fn iter(&mut self) -> Iter<'_, MovePly> {
+    pub fn iter(&self) -> Iter<'_, MovePly> {
 
         self.moves[..self.move_count].iter()
 
@@ -79,6 +79,17 @@ impl MoveList {
         for (j, &i) in indices[..self.move_count].iter().enumerate() {
             self.moves[j] = original_copy[i];
         }
+    }
+
+    pub fn contains_move(&self, checked_move: MovePly) -> bool {
+        for cur_move in self.iter() {
+            if *cur_move == checked_move {
+                return true;
+            }
+        }
+
+        false
+
     }
 
 

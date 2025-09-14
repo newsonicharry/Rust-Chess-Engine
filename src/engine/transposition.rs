@@ -20,6 +20,7 @@ const FLAG_SHIFT: u8 = 6;
     pub eval: i16,
     pub depth: u8,
     pub tt_flag: TTFlag,
+    pub packed_data: u128,
 }
 
 impl From<u128> for TTEntry {
@@ -32,6 +33,7 @@ impl From<u128> for TTEntry {
             eval:     ((packed_data >> EVAL_SHIFT)  & 0xFFFF) as i16,
             depth:    ((packed_data >> DEPTH_SHIFT) & 0xFF)   as u8,
             tt_flag:  (((packed_data >> FLAG_SHIFT) & 0b11)   as u8).into(),
+            packed_data: packed_data,
         }
 
     }
@@ -49,6 +51,8 @@ pub struct Transposition {
     entries: Box<[AtomicU128]>,
     num_entries: u64,
     generation: u16,
+
+    entries_filled: AtomicU128,
 
     pub best_move_score: AtomicI16,
     pub best_move: AtomicU16,
@@ -71,6 +75,7 @@ impl Transposition {
             generation: MAX_MOVES as u16,
             best_move: AtomicU16::new(0),
             best_move_score: AtomicI16::new(0),
+            entries_filled: AtomicU128::new(0),
         }
     }
 
@@ -80,7 +85,7 @@ impl Transposition {
 
         let unpacked_zobrist = (packed_data >> ZOBRIST_SHIFT) as u64;
 
-        if packed_data == 0 || unpacked_zobrist != zobrist {
+        if unpacked_zobrist != zobrist {
             return None;
         }
 
@@ -97,6 +102,8 @@ impl Transposition {
         }
 
         let existing_entry = self.probe(zobrist);
+
+
         if existing_entry.is_some() && existing_entry.unwrap().score > score {
             return;
         }
@@ -104,7 +111,7 @@ impl Transposition {
         let packed_data: u128 = ((zobrist as u128) << ZOBRIST_SHIFT)
                                 | (((score as u16) as u128) << SCORE_SHIFT)
                                 | ((cur_move.packed_data() as u128) << MOVE_SHIFT)
-                                | ((eval as u128) << EVAL_SHIFT)
+                                | (((eval as u16) as u128) << EVAL_SHIFT)
                                 | ((depth as u128) << DEPTH_SHIFT)
                                 | ((tt_flag as u128) << FLAG_SHIFT);
 

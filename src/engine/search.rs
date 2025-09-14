@@ -34,6 +34,8 @@ fn search(
 
     if limits.is_hard_stop() { return 0 }
 
+    thread_data.nodes += 1;
+
     let tt_entry = tt.probe(board.zobrist());
     if let Some(entry) = tt_entry {
         if entry.depth >= depth{
@@ -65,7 +67,7 @@ fn search(
     if board.in_check() { depth += 1; }
 
     if depth == 0{
-        return quiescence_search(board, ply_searched+1, 8, alpha, beta, nnue, limits)
+        return quiescence_search(board, ply_searched+1, 8, alpha, beta, thread_data, nnue, limits)
     }
 
 
@@ -97,6 +99,7 @@ fn search(
     order_moves(board, &mut move_list, &tt_entry, &thread_data, ply_searched);
 
     let mut node_type = TTFlag::Upper;
+    let mut best_eval = -INFINITY;
     let mut best_move = move_list.move_at( 0);
 
 
@@ -135,16 +138,21 @@ fn search(
             best_move = *cur_move;
         }
 
+        if eval > best_eval {
+            best_eval = eval;
+            best_move = *cur_move;
+        }
+
 
 
     }
+    tt.update(board.zobrist(), best_move, alpha, depth, node_type);
 
     if ply_searched == 0 {
         tt.best_move.store(best_move.packed_data(), Ordering::Relaxed);
         tt.best_move_score.store(alpha, Ordering::Relaxed);
     }
 
-    tt.update(board.zobrist(), best_move, alpha, depth, node_type);
 
     alpha
 }
@@ -165,10 +173,13 @@ fn quiescence_search(
     depth: u8,
     mut alpha: i16,
     beta: i16,
+    thread_data: &mut ThreadData,
     nnue: &mut NNUE,
     limits: &SearchLimits,
 ) -> i16{
     if limits.is_hard_stop() { return 0 }
+
+    thread_data.nodes += 1;
 
 
     let eval = nnue.evaluate(board.side_to_move());
@@ -195,7 +206,7 @@ fn quiescence_search(
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
-        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, nnue, limits);
+        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, nnue, limits);
         if limits.is_hard_stop() { return 0 }
 
         board.undo_move();
@@ -212,6 +223,33 @@ fn quiescence_search(
     alpha
 }
 
+
+fn pv_from_transposition(board: &Board, tt: &Transposition) -> String {
+    let mut board_clone = board.clone();
+    let mut pv_line: String = "".to_string();
+
+    loop{
+        if let Some(entry) = tt.probe(board_clone.zobrist()){
+            let best_move = entry.cur_move;
+
+            let mut valid_moves = MoveList::default();
+            MoveGenerator::<GEN_ALL>::generate(&mut board_clone, &mut valid_moves);
+
+            if !valid_moves.contains_move(best_move) {
+                break;
+            }
+
+            pv_line += &*(best_move.to_string().as_str().to_owned() + " ");
+            board_clone.make_move(&best_move);
+        }else {
+            break
+        }
+
+    }
+
+    pv_line
+
+}
 pub fn iterative_deepening(
     board: &mut Board,
     tt: &Transposition,
@@ -225,8 +263,14 @@ pub fn iterative_deepening(
     
         search(board, 0, cur_depth, -INFINITY, INFINITY, &mut thread_data, tt, nnue, search_limits);
         if search_limits.is_hard_stop() { break }
-    
-        // println!("info depth {} score cp {} time {}", cur_depth, tt.best_move_score.load(Ordering::Relaxed), search_limits.ms_elapsed());
+
+        let pv_line = pv_from_transposition(board, tt);
+        let sel_depth = pv_line.split(" ").collect::<Vec<&str>>().len()-1;
+        let time = search_limits.ms_elapsed();
+        let eval = tt.best_move_score.load(Ordering::Relaxed);
+        let nodes = thread_data.nodes;
+        let nps = (nodes as f64 / (time as f64 / 1000f64).max(0.0001f64)) as u128;
+        println!("info depth {cur_depth} seldepth {sel_depth} score cp {eval} nodes {nodes} nps {nps} time {time} pv {pv_line}");
     
         if search_limits.is_soft_stop() { break }
     }
@@ -244,13 +288,7 @@ fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<
 
 
     for (i, cur_move) in move_list.iter().enumerate(){
-        let from = cur_move.from();
-        let to = cur_move.to();
         let flag = cur_move.flag();
-
-        let piece = board.piece_at(from);
-        let capture = board.piece_at(to);
-
 
         if let Some(entry) = prev_best_move {
             if entry.cur_move == *cur_move {
@@ -263,10 +301,7 @@ fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<
             move_values[i] += 5000;
         }
 
-        // will replace later with a proper SEE implementation
-        if capture.is_piece() {
-            move_values[i] += 5 * PIECE_VALUES[capture as usize] - PIECE_VALUES[piece as usize];
-        }
+        move_values[i] += 5*(see(cur_move.from(), cur_move.to(), board).max(0));
 
         if flag.is_promotion(){
             move_values[i] +=  PIECE_VALUES[flag.promotion_piece(White) as usize];
