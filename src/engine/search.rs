@@ -35,10 +35,17 @@ fn search(
     if limits.is_hard_stop() { return 0 }
 
     let tt_entry = tt.probe(board.zobrist());
-    if let Some(entry) = tt_entry && ply_searched > 0 {
+    if let Some(entry) = tt_entry {
         if entry.depth >= depth{
             match entry.tt_flag{
-                TTFlag::Exact => {return entry.eval},
+                TTFlag::Exact => {
+                    if ply_searched == 0 {
+                        tt.best_move.store(entry.cur_move.packed_data(), Ordering::Relaxed);
+                        tt.best_move_score.store(entry.eval, Ordering::Relaxed);
+                    }
+
+                    return entry.eval
+                },
                 TTFlag::Upper => if entry.eval <= alpha {return entry.eval},
                 TTFlag::Lower => if entry.eval >= beta {return entry.eval},
             }
@@ -101,6 +108,7 @@ fn search(
 
         if i >= 3 && depth >= 3 {
             eval = -search(board, ply_searched+1, depth-2, -alpha - 1, -alpha, thread_data, tt, nnue, limits);
+            if limits.is_hard_stop() { return 0 }
 
             if eval > alpha {
                 eval = -search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, tt, nnue, limits);
@@ -176,7 +184,7 @@ fn quiescence_search(
     MoveGenerator::<GEN_TACTICS>::generate(board, &mut move_list);
 
     if Arbiter::is_draw(board) {
-        return 0
+        return 0;
     }
 
     for cur_move in move_list.iter(){
@@ -218,7 +226,7 @@ pub fn iterative_deepening(
         search(board, 0, cur_depth, -INFINITY, INFINITY, &mut thread_data, tt, nnue, search_limits);
         if search_limits.is_hard_stop() { break }
     
-        println!("info depth {} score cp {} time {}", cur_depth, tt.best_move_score.load(Ordering::Relaxed), search_limits.ms_elapsed());
+        // println!("info depth {} score cp {} time {}", cur_depth, tt.best_move_score.load(Ordering::Relaxed), search_limits.ms_elapsed());
     
         if search_limits.is_soft_stop() { break }
     }
@@ -287,9 +295,9 @@ pub fn search_start(
 
     let mut thread_board = board.clone();
 
-    let tt_new = Arc::clone(&tt);
+    // let tt_new? = Arc::clone(&tt);
 
-    let best_move = iterative_deepening(&mut thread_board, &tt_new, &mut nnue, &search_limits);
+    let best_move = iterative_deepening(&mut thread_board, &tt, &mut nnue, &search_limits);
     println!("bestmove {}\n",  best_move);
 
     // let limits = search_limits.clone();

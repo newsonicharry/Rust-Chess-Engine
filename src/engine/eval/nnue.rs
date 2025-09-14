@@ -3,7 +3,7 @@ use crate::chess::consts::MAX_MOVES;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::move_flag::MoveFlag::{CastleShort, CastleLong};
+use crate::chess::types::move_flag::MoveFlag::{CastleLong, CastleShort};
 use crate::chess::types::piece::Piece::{BlackKing, BlackRook, WhiteKing, WhiteRook};
 use crate::chess::types::square::Square;
 use crate::engine::eval::accumulator::Accumulator;
@@ -77,6 +77,9 @@ impl NNUE {
 
         else if move_flag.is_promotion(){
             let promotion_piece = move_flag.promotion_piece(board.side_to_move());
+            if capture.is_piece(){
+                current_accumulator.remove_piece(capture, to);
+            }
             current_accumulator.make_promotion(piece, promotion_piece, from, to);
         }
 

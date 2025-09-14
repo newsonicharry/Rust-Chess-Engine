@@ -14,7 +14,7 @@ impl Arbiter{
             return MatchResult::Loss
         }
 
-        if Self::is_insufficient_material(board) || Self::is_stalemate(move_list) {
+        if Self::is_insufficient_material(board) || Self::is_stalemate(board, move_list) || Self::is_fifty_move_rule(board) || Self::is_three_fold(board) {
             return MatchResult::Draw
         }
 
@@ -26,32 +26,12 @@ impl Arbiter{
         Self::is_fifty_move_rule(board) || Self::is_insufficient_material(board) || Self::is_three_fold(board)
     }
 
-    fn is_stalemate(move_list: &MoveList) -> bool {
-        move_list.move_count() == 0
+    fn is_stalemate(board: &Board, move_list: &MoveList) -> bool {
+        move_list.move_count() == 0 && !board.in_check()
     }
 
     fn is_checkmate(board: &Board, move_list: &MoveList) -> bool{
-        if move_list.move_count() == 0{
-            let king_square = board.king_square(board.side_to_move());
-
-            let rooks_checking_king = rook_lookup(king_square, board.occupancy()) & board.bitboard_them(Rook);
-            if rooks_checking_king != 0 { return true }
-
-            let queens_checking_king = queen_lookup(king_square, board.occupancy()) & board.bitboard_them(Queen);
-            if queens_checking_king != 0 { return true }
-
-            let knights_checking_king = MOVEMENT_MASKS.knight[king_square as usize] & board.bitboard_them(Knight);
-            if knights_checking_king != 0 { return true }
-
-            let bishops_checking_king = bishop_lookup(king_square, board.occupancy()) & board.bitboard_them(Bishop);
-            if bishops_checking_king != 0 { return true }
-
-            let pawns_checking_king = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), king_square) & board.bitboard_them(Pawn);
-            if pawns_checking_king != 0 { return true }
-
-            return false
-        }
-        false
+        move_list.move_count() == 0 && board.in_check()
     }
 
     fn is_fifty_move_rule(board: &Board) -> bool{

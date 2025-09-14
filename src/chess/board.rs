@@ -486,6 +486,7 @@ impl Board{
         self.push_board_state(MovePly::default(), NoPiece);
         self.zobrist ^= ZOBRIST.side_to_move();
         self.side_to_move = !self.side_to_move;
+        self.can_en_passant = false;
 
     }
 

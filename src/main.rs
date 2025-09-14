@@ -12,7 +12,6 @@ use crate::engine::transposition::Transposition;
 use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
 use crate::uci::parser;
-use rand::Rng;
 use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
@@ -136,7 +135,11 @@ fn main() {
 
             }
 
-            Commands::Unknown(line) =>  println!("Unknown command: '{line}'. Type help for more information."),
+            Commands::Unknown(line) =>  {
+                if line != "\r\n" {
+                    println!("Unknown command: '{line}'. Type help for more information.")
+                }
+            },
 
             _ => {}
         }
@@ -216,17 +219,15 @@ fn perft(board: &mut Board, depth: u8){
 //     for fen in all_fens {
 //         let mut tt = Arc::new(Transposition::new(16));
 //
-//         let mut uci_moves_played: Vec<String> = Vec::new();
+//         let mut uci_moves_played: Vec<MovePly> = Vec::new();
 //         println!("fen: {fen}");
 //         loop{
 //             let mut board = Board::default();
 //             board.new(fen);
-//             // board.new(START_POS);
 //
 //             for uci_move in &uci_moves_played {
-//                 board.make_move(&move_ply::uci_move_parser(uci_move.to_string(), &board));
+//                 board.make_move(uci_move);
 //             }
-//             println!("{board}");
 //
 //             let mut nnue = NNUE::default();
 //             nnue.new(&mut board);
@@ -241,8 +242,8 @@ fn perft(board: &mut Board, depth: u8){
 //             }
 //
 //             let move_played = iterative_deepening(&mut board, &tt, &mut nnue, &SearchLimits::new(100, 100));
-//             uci_moves_played.push(move_played.to_string());
-//             // println!("{move_played}");
+//             uci_moves_played.push(move_played);
+//             println!("{move_played}");
 //
 //         }
 //
