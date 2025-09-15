@@ -66,7 +66,7 @@ fn search(
     if board.in_check() { depth += 1; }
 
     if depth == 0{
-        return quiescence_search(board, ply_searched+1, 8, alpha, beta, thread_data, nnue, limits)
+        return quiescence_search(board, ply_searched+1, 8, alpha, beta, thread_data, tt, nnue, limits)
     }
 
 
@@ -173,6 +173,7 @@ fn quiescence_search(
     mut alpha: i16,
     beta: i16,
     thread_data: &mut ThreadData,
+    tt: &Transposition,
     nnue: &mut NNUE,
     limits: &SearchLimits,
 ) -> i16{
@@ -180,6 +181,17 @@ fn quiescence_search(
 
     thread_data.nodes += 1;
 
+
+    let tt_entry = tt.probe(board.zobrist());
+    if let Some(entry) = tt_entry {
+        if entry.depth >= depth{
+            match entry.tt_flag{
+                TTFlag::Exact => { return entry.eval },
+                TTFlag::Upper => if entry.eval <= alpha {return entry.eval},
+                TTFlag::Lower => if entry.eval >= beta {return entry.eval},
+            }
+        }
+    }
 
     let eval = nnue.evaluate(board.side_to_move());
 
@@ -197,6 +209,9 @@ fn quiescence_search(
         return 0;
     }
 
+    let mut node_type = TTFlag::Upper;
+    let mut best_move = move_list.move_at( 0);
+
     for cur_move in move_list.iter(){
         // if see(cur_move.from(), cur_move.to(), board).is_negative() {
         //     continue;
@@ -205,19 +220,26 @@ fn quiescence_search(
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
-        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, nnue, limits);
+        let eval = -quiescence_search(board, ply_searched+1, depth-1, -beta, -alpha, thread_data, tt, nnue, limits);
         if limits.is_hard_stop() { return 0 }
 
         board.undo_move();
         nnue.undo_move();
 
+        if eval >= beta{
+            tt.update(board.zobrist(), best_move, alpha, 0, TTFlag::Lower);
+            return beta;
+        }
 
-        if eval < alpha {
+        if eval > alpha {
+            best_move = *cur_move;
+            node_type = TTFlag::Exact;
             alpha = eval;
         }
 
     }
 
+    tt.update(board.zobrist(), best_move, alpha, 0, node_type);
 
     alpha
 }
