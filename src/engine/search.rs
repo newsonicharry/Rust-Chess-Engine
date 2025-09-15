@@ -1,22 +1,21 @@
 use crate::chess::board::Board;
+use crate::chess::consts::PIECE_VALUES;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS};
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color::White;
-use crate::chess::consts::PIECE_VALUES;
+use crate::chess::types::piece::BasePiece::{King, Pawn};
 use crate::engine::arbiter::Arbiter;
 use crate::engine::eval::nnue::NNUE;
 use crate::engine::search_limits::SearchLimits;
+use crate::engine::see::see;
 use crate::engine::thread::ThreadData;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
-use crate::chess::types::piece::BasePiece::{King, Pawn};
-use crate::engine::see::see;
 
 const INFINITY: i16 = 30000;
 
@@ -250,6 +249,50 @@ fn pv_from_transposition(board: &Board, tt: &Transposition) -> String {
     pv_line
 
 }
+
+fn aspiration_windows(
+    board: &mut Board,
+    tt: &Transposition,
+    nnue: &mut NNUE,
+    search_limits: &SearchLimits,
+    thread_data: &mut ThreadData,
+    depth: u8,
+    ){
+
+    let mut alpha = -INFINITY;
+    let mut beta = INFINITY;
+    let mut delta = 25;
+
+    if depth >= 5 {
+        let current_eval = tt.best_move_score.load(Ordering::Relaxed);
+        alpha = current_eval - delta;
+        beta = current_eval + delta;
+    }
+
+
+    loop{
+        let eval = search(board, 0, depth, alpha, beta, thread_data, tt, nnue, search_limits);
+
+        if search_limits.is_hard_stop() { return; }
+
+        if eval <= alpha {
+            beta = (alpha + beta) / 2;
+            alpha -= delta;
+        } else if eval >= beta{
+            beta += delta;
+        }else {
+            break;
+        }
+
+        delta += delta / 2;
+        if delta >= 1000{
+            alpha = -INFINITY;
+            beta = INFINITY;
+        }
+
+    }
+
+}
 pub fn iterative_deepening(
     board: &mut Board,
     tt: &Transposition,
@@ -260,8 +303,8 @@ pub fn iterative_deepening(
     let mut thread_data = ThreadData::default();
 
     for cur_depth in 1.. {
-    
-        search(board, 0, cur_depth, -INFINITY, INFINITY, &mut thread_data, tt, nnue, search_limits);
+
+        aspiration_windows(board, tt, nnue, search_limits, &mut thread_data, cur_depth);
         if search_limits.is_hard_stop() { break }
 
         let pv_line = pv_from_transposition(board, tt);
