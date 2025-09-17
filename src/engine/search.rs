@@ -84,16 +84,15 @@ fn search(
         }
     }
 
-    let static_eval;
-    if tt_entry.is_some() {
-        static_eval = tt_entry.unwrap().eval;
-    }else {
-        static_eval = nnue.evaluate(board.side_to_move());
-    }
+    let static_eval = tt_entry.map(|e| e.eval).unwrap_or_else(|| nnue.evaluate(board.side_to_move()));
 
     if static_eval >= (beta + 80 * depth as i16) {
         return beta;
     }
+
+    // if depth > 4 && tt_entry.is_none() {
+    //     depth -= 1;
+    // }
 
     order_moves(board, &mut move_list, &tt_entry, &thread_data, ply_searched);
 
@@ -250,6 +249,10 @@ fn pv_from_transposition(board: &Board, tt: &Transposition) -> String {
     let mut pv_line: String = "".to_string();
 
     loop{
+        if pv_line.chars().filter(|&cur_char| ' ' == cur_char).count() == 20 {
+            break;
+        }
+
         if let Some(entry) = tt.probe(board_clone.zobrist()){
             let best_move = entry.cur_move;
 
@@ -259,6 +262,7 @@ fn pv_from_transposition(board: &Board, tt: &Transposition) -> String {
             if !valid_moves.contains_move(best_move) {
                 break;
             }
+
 
             pv_line += &*(best_move.to_string().as_str().to_owned() + " ");
             board_clone.make_move(&best_move);

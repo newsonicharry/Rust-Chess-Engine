@@ -1,12 +1,13 @@
 #![feature(integer_atomics)]
 
+use std::fs::File;
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply;
 use crate::chess::types::color::Color;
-use crate::engine::search::search_start;
+use crate::engine::search::{iterative_deepening, search_start};
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::Transposition;
 use crate::uci::commands::{Commands, OptionsType};
@@ -16,6 +17,10 @@ use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
 use std::time::Instant;
+use crate::chess::move_ply::MovePly;
+use crate::engine::arbiter::Arbiter;
+use crate::engine::eval::nnue::NNUE;
+use crate::engine::types::match_result::MatchResult;
 
 mod chess;
 mod general;
@@ -209,47 +214,47 @@ fn perft(board: &mut Board, depth: u8){
 }
 
 // test code in case i need to check if something is broken
-// pub fn run_self_play(){
-//
-//     let mut fen_file = File::open("C:/Users/Harry/Desktop/UHO_2022_8mvs_+110_+119.epd").unwrap();
-//     let mut string = String::new();
-//     fen_file.read_to_string(&mut string).unwrap();
-//     let all_fens = string.split("\n").collect::<Vec<&str>>();
-//
-//     for fen in all_fens {
-//         let mut tt = Arc::new(Transposition::new(16));
-//
-//         let mut uci_moves_played: Vec<MovePly> = Vec::new();
-//         println!("fen: {fen}");
-//         loop{
-//             let mut board = Board::default();
-//             board.new(fen);
-//
-//             for uci_move in &uci_moves_played {
-//                 board.make_move(uci_move);
-//             }
-//
-//             let mut nnue = NNUE::default();
-//             nnue.new(&mut board);
-//
-//             let mut valid_moves = MoveList::default();
-//             MoveGenerator::<GEN_ALL>::generate(&mut board, &mut valid_moves);
-//
-//             let match_result = Arbiter::arbitrate(&mut board, &mut valid_moves);
-//             match match_result {
-//                 MatchResult::Loss | MatchResult::Draw => {break}
-//                 MatchResult::NoResult => {}
-//             }
-//
-//             let move_played = iterative_deepening(&mut board, &tt, &mut nnue, &SearchLimits::new(100, 100));
-//             uci_moves_played.push(move_played);
-//             println!("{move_played}");
-//
-//         }
-//
-//
-//     }
-//     println!("{}", string);
-//
-//
-// }
+pub fn run_self_play(){
+
+    let mut fen_file = File::open("C:/Users/Harry/Desktop/UHO_2022_8mvs_+110_+119.epd").unwrap();
+    let mut string = String::new();
+    fen_file.read_to_string(&mut string).unwrap();
+    let all_fens = string.split("\n").collect::<Vec<&str>>();
+
+    for fen in all_fens {
+        let mut tt = Arc::new(Transposition::new(16));
+
+        let mut uci_moves_played: Vec<MovePly> = Vec::new();
+        println!("fen: {fen}");
+        loop{
+            let mut board = Board::default();
+            board.new(fen);
+
+            for uci_move in &uci_moves_played {
+                board.make_move(uci_move);
+            }
+
+            let mut nnue = NNUE::default();
+            nnue.new(&mut board);
+
+            let mut valid_moves = MoveList::default();
+            MoveGenerator::<GEN_ALL>::generate(&mut board, &mut valid_moves);
+
+            let match_result = Arbiter::arbitrate(&mut board, &mut valid_moves);
+            match match_result {
+                MatchResult::Loss | MatchResult::Draw => {break}
+                MatchResult::NoResult => {}
+            }
+
+            let move_played = iterative_deepening(&mut board, &tt, &mut nnue, &SearchLimits::new(100, 100));
+            uci_moves_played.push(move_played);
+            println!("{move_played}");
+
+        }
+
+
+    }
+    println!("{}", string);
+
+
+}
