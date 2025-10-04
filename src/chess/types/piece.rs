@@ -104,7 +104,7 @@ impl Piece{
 
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum BasePiece{
     Pawn,
@@ -120,7 +120,14 @@ const BASE_PIECES: [BasePiece; 6] = [BasePiece::Pawn, BasePiece::Knight, BasePie
 
 impl From<Piece> for BasePiece {
     fn from(piece: Piece) -> Self {
-        unsafe { mem::transmute(piece as u8) }
+        let piece_value = piece as u8;
+        let mut no_color_piece = piece_value;
+
+        if no_color_piece >= BlackPawn as u8  {
+            no_color_piece -= BlackPawn as u8;
+        }
+
+        unsafe { mem::transmute(no_color_piece) }
     }
 }
 

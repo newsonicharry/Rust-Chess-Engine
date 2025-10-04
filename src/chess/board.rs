@@ -126,6 +126,13 @@ impl Board{
         self.in_check
     }
 
+    pub fn last_move(&self) -> Option<MovePly>{
+        if self.cur_board_state == 0 { return None; }
+
+        let last_move = self.board_states[self.cur_board_state-1].played;
+        Some(last_move)
+    }
+
     pub fn orthogonal_bitboard_them(&self) -> u64{
         match self.side_to_move {
             Color::Black => self.bitboards[WhiteRook as usize].0 | self.bitboards[WhiteQueen as usize].0,

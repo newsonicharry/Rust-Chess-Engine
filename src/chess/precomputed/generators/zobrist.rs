@@ -81,15 +81,15 @@ impl Zobrist{
 
     pub fn short_castle(&self, color: Color) -> u64{
         match color {
-            White => self.castling_rights[WHITE_LONG_CASTLE],
-            Black => self.castling_rights[BLACK_LONG_CASTLE],
+            White => self.castling_rights[WHITE_SHORT_CASTLE],
+            Black => self.castling_rights[BLACK_SHORT_CASTLE],
         }
     }
     
     pub fn long_castle(&self, color: Color) -> u64{
         match color { 
-            White => self.castling_rights[WHITE_SHORT_CASTLE],
-            Black => self.castling_rights[BLACK_SHORT_CASTLE],
+            White => self.castling_rights[WHITE_LONG_CASTLE],
+            Black => self.castling_rights[BLACK_LONG_CASTLE],
         }
     }
 

@@ -1,8 +1,9 @@
 use crate::chess::board::Board;
 use crate::chess::consts::PIECE_VALUES;
-use crate::chess::precomputed::accessor::{bishop_lookup, queen_lookup, rook_lookup, MOVEMENT_MASKS};
+use crate::chess::move_ply::MovePly;
+use crate::chess::precomputed::accessor::{bishop_lookup, queen_lookup, rook_lookup, slider_lookup, MOVEMENT_MASKS};
 use crate::chess::types::piece::BasePiece::{Bishop, King, Knight, Pawn, Queen, Rook};
-use crate::chess::types::piece::BasePiece;
+use crate::chess::types::piece::{BasePiece, Piece};
 use crate::chess::types::square::Square;
 use crate::general::bits;
 
@@ -53,4 +54,49 @@ pub fn see(first_attacker_square: Square, square: Square, board: &Board) -> i16{
 
     gain
 
+}
+
+
+pub fn move_is_quiet(board: &Board, played: &MovePly) -> bool{
+    if played.flag().is_promotion() {
+        return false;
+    }
+
+    let capture = board.piece_at(played.to());
+    if capture.is_piece() {
+        return false;
+    }
+
+    let square = played.from();
+    let piece = BasePiece::from(board.piece_at(square));
+    let enemy_king_mask = board.king_square(!board.side_to_move()).mask();
+
+
+    match piece {
+        Pawn =>  if MOVEMENT_MASKS.pawn_attacks(!board.side_to_move(), square) & enemy_king_mask != 0{
+            return false;
+        }
+
+        Knight =>  if MOVEMENT_MASKS.knight[square as usize] & enemy_king_mask != 0{
+            return false;
+        }
+
+        Bishop =>  if slider_lookup(Bishop, square, board.occupancy_them()) & enemy_king_mask != 0{
+            return false;
+        }
+
+        Rook =>  if slider_lookup(Rook, square, board.occupancy_them()) & enemy_king_mask != 0{
+            return false;
+        }
+
+        Queen =>  if slider_lookup(Queen, square, board.occupancy_them()) & enemy_king_mask != 0{
+            return false;
+        }
+
+        _ => { }
+
+    }
+
+
+    true
 }

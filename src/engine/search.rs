@@ -9,7 +9,7 @@ use crate::chess::types::piece::BasePiece::{King, Pawn};
 use crate::engine::arbiter::Arbiter;
 use crate::engine::eval::nnue::NNUE;
 use crate::engine::search_limits::SearchLimits;
-use crate::engine::see::see;
+use crate::engine::search_funcs::{see, move_is_quiet};
 use crate::engine::thread::ThreadData;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
@@ -90,9 +90,9 @@ fn search(
         return beta;
     }
 
-    // if depth > 4 && tt_entry.is_none() {
-    //     depth -= 1;
-    // }
+    if depth > 4 && tt_entry.is_none() {
+        depth -= 1;
+    }
 
     order_moves(board, &mut move_list, &tt_entry, &thread_data, ply_searched);
 
@@ -102,12 +102,17 @@ fn search(
 
 
     for (i, cur_move) in move_list.iter().enumerate(){
+        // if depth == 1 && static_eval + 200 <= alpha {
+        //     continue;
+        // }
+
+
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
         let mut eval;
 
-        if i >= 3 && depth >= 3 {
+        if i >= 3 && depth >= 3{
             eval = -search(board, ply_searched+1, depth-2, -alpha - 1, -alpha, thread_data, tt, nnue, limits);
             if limits.is_hard_stop() { return 0 }
 
@@ -127,7 +132,8 @@ fn search(
         if eval >= beta {
             tt.update(board.zobrist(), *cur_move, beta, depth, TTFlag::Lower);
             thread_data.killers.update(*cur_move, ply_searched);
-            thread_data.history_heuristics.update_history(*cur_move);
+            thread_data.history_heuristics.update_history(*cur_move, board.side_to_move());
+            thread_data.counter_move_heuristics.update_counter_move(*cur_move, best_move, board.side_to_move());
             return beta;
         }
         if eval > alpha {
@@ -201,17 +207,28 @@ fn quiescence_search(
         return alpha;
     }
 
-    let mut move_list = MoveList::default();
-    MoveGenerator::<GEN_TACTICS>::generate(board, &mut move_list);
+    let mut all_move_list = MoveList::default();
+    MoveGenerator::<GEN_ALL>::generate(board, &mut all_move_list);
 
-    if Arbiter::is_draw(board) {
-        return 0;
+    let match_result = Arbiter::arbitrate(board, &all_move_list);
+    match match_result {
+        MatchResult::Draw => {return 0},
+        MatchResult::Loss => {return -INFINITY + ply_searched as i16},
+        MatchResult::NoResult => {},
     }
 
-    let mut node_type = TTFlag::Upper;
-    let mut best_move = move_list.move_at( 0);
+    let mut quiet_move_list = MoveList::default();
+    MoveGenerator::<GEN_TACTICS>::generate(board, &mut quiet_move_list);
 
-    for cur_move in move_list.iter(){
+    // if Arbiter::is_draw(board) {
+    //     return 0;
+    // }
+
+
+    let mut node_type = TTFlag::Upper;
+    let mut best_move = quiet_move_list.move_at( 0);
+
+    for cur_move in quiet_move_list.iter(){
         // if see(cur_move.from(), cur_move.to(), board).is_negative() {
         //     continue;
         // }
@@ -355,6 +372,12 @@ fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<
 
     let mut move_values: [i16; 256] = [0; 256];
 
+    let mut counter_move = MovePly::default();
+    let last_played = board.last_move();
+
+    if let Some(last_move) = last_played {
+        counter_move = thread_data.counter_move_heuristics.get_counter_move(last_move, board.side_to_move());
+    }
 
     for (i, cur_move) in move_list.iter().enumerate(){
         let flag = cur_move.flag();
@@ -366,6 +389,10 @@ fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<
             }
         }
 
+        if *cur_move == counter_move {
+            move_values[i] += 300;
+        }
+
         if thread_data.killers.contains(ply_searched, *cur_move) {
             move_values[i] += 5000;
         }
@@ -373,14 +400,14 @@ fn order_moves(board: &Board, move_list: &mut MoveList, prev_best_move: &Option<
         move_values[i] += 5*(see(cur_move.from(), cur_move.to(), board).max(0));
 
         if flag.is_promotion(){
-            move_values[i] +=  PIECE_VALUES[flag.promotion_piece(White) as usize];
+            move_values[i] += PIECE_VALUES[flag.promotion_piece(White) as usize]*10;
         }
 
         if flag.is_castles() {
             move_values[i] += 1000;
         }
 
-        move_values[i] += thread_data.history_heuristics.get_history(*cur_move) as i16;
+        move_values[i] += thread_data.history_heuristics.get_history(*cur_move, board.side_to_move()) as i16;
 
     }
 
@@ -403,6 +430,8 @@ pub fn search_start(
 
     let best_move = iterative_deepening(&mut thread_board, &tt, &mut nnue, &search_limits);
     println!("bestmove {}\n",  best_move);
+    // tt.age();
+
 
     // let limits = search_limits.clone();
     // let mut handles = Vec::new();

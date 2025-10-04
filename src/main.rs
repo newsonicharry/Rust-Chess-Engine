@@ -87,7 +87,6 @@ fn main() {
             }
 
             Commands::Go { move_time, wtime, btime, winc, binc, moves_to_go} => {
-
                 let mut hard_think_time: u32 = 1000;
                 let soft_think_time;
 

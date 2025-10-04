@@ -62,10 +62,8 @@ impl Arbiter{
 
         false
     }
-    
-    fn is_three_fold(board: &Board) -> bool{
 
-        // if the half move clock is zero it means the position changed and cannot be repeated
+    fn is_three_fold(board: &Board) -> bool {
         if board.half_move_clock() == 0 {
             return false;
         }
@@ -73,25 +71,21 @@ impl Arbiter{
         let mut position_count = HashMap::new();
         position_count.insert(board.zobrist(), 1);
 
-        let past_states = board.past_board_states();
-        if past_states.is_none() {
-            return false;
-        }
+        if let Some(past_states) = board.past_board_states() {
+            for past_board_state in past_states.iter().rev() {
+                *position_count.entry(past_board_state.zobrist).or_insert(0) += 1;
 
-        for past_board_state in past_states.unwrap().iter().rev() {
-            *position_count.entry(past_board_state.zobrist).or_insert(0) += 1;
+                if position_count[&past_board_state.zobrist] >= 3 {
+                    return true;
+                }
 
-            if *position_count.get(&past_board_state.zobrist).unwrap() == 3 {
-                // println!("the zobrist of {} made it ture", past_board_state.zobrist);
-                // println!("{:?}", position_count);
-                return true;
-            }
-
-            if past_board_state.half_move_clock == 0 {
-                return false;
+                if past_board_state.half_move_clock == 0 {
+                    break; // not return false
+                }
             }
         }
         false
     }
+
 
 }

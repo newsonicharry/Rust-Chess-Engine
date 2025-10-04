@@ -8,4 +8,5 @@ pub mod arbiter;
 pub mod types;
 mod killers;
 mod history_heuristics;
-pub mod see;
+mod search_funcs;
+mod counter_move_heuristics;

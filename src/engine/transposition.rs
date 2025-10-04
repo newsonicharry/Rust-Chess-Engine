@@ -33,7 +33,7 @@ impl From<u128> for TTEntry {
             eval:     ((packed_data >> EVAL_SHIFT)  & 0xFFFF) as i16,
             depth:    ((packed_data >> DEPTH_SHIFT) & 0xFF)   as u8,
             tt_flag:  (((packed_data >> FLAG_SHIFT) & 0b11)   as u8).into(),
-            packed_data: packed_data,
+            packed_data,
         }
 
     }
@@ -50,7 +50,7 @@ const DEPTH_MULTIPLIER: i16 = 4;
 pub struct Transposition {
     entries: Box<[AtomicU128]>,
     num_entries: u64,
-    generation: u16,
+    generation: AtomicU16,
 
     entries_filled: AtomicU128,
 
@@ -72,11 +72,16 @@ impl Transposition {
         Self{
             entries: entries.into(),
             num_entries: round_down_pow2,
-            generation: MAX_MOVES as u16,
+            generation: AtomicU16::new(0),
             best_move: AtomicU16::new(0),
             best_move_score: AtomicI16::new(0),
             entries_filled: AtomicU128::new(0),
         }
+    }
+
+    pub fn age(&self){
+        let new_generation = self.generation.load(Ordering::Relaxed) + 1;
+        self.generation.store(new_generation, Ordering::Relaxed);
     }
 
     pub fn probe(&self, zobrist: u64) -> Option<TTEntry>{
@@ -94,7 +99,7 @@ impl Transposition {
 
     pub fn update(&self, zobrist: u64, cur_move: MovePly, eval: i16, depth: u8, tt_flag: TTFlag ) {
 
-        let mut score: i16 = depth as i16 * DEPTH_MULTIPLIER + self.generation as i16 * AGE_MULTIPLIER;
+        let mut score: i16 = depth as i16 * DEPTH_MULTIPLIER + self.generation.load(Ordering::Relaxed) as i16 * AGE_MULTIPLIER;
 
         match tt_flag {
             TTFlag::Exact => score += EXACT_BONUS,
