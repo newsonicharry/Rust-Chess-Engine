@@ -5,6 +5,7 @@ pub const NUM_RANKS: usize = 8;
 
 pub const MAX_MOVES: usize = 1024;
 pub const MAX_DEPTH: usize = 256;
+pub const MAX_POSITIONAL_MOVES: usize = 256;
 
 pub const PIECE_VALUES: [i16; 12] = [100, 320, 320, 500, 1000, 10000, 100, 320, 320, 500, 1000, 10000];
 

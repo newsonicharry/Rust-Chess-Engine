@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use crate::chess::consts::{NUM_SQUARES, NUM_DIAGONAL_ENTRIES, NUM_ORTHOGONAL_ENTRIES, ROOK_DIRECTIONS, BISHOP_DIRECTIONS};
-use crate::chess::precomputed::generators::helpers::{create_dynamic_mask, NO_EDGE};
+use crate::precomputed::generators::helpers::{create_dynamic_mask, NO_EDGE};
 use crate::chess::types::square::Square;
 use rand::Rng;
 use crate::chess::types::file::File;
@@ -87,8 +87,8 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
             for blocker in blockers {
                 let magic = self.magics[piece_index];
                 let shift = self.shifts[piece_index];
-                // let key = blocker.wrapping_mul(magic) >> shift;
-                let key = unsafe { std::arch::x86_64::_pext_u64(blocker, self.no_edge_masks[piece_index]) };
+                let key = blocker.wrapping_mul(magic) >> shift;
+                // let key = unsafe { std::arch::x86_64::_pext_u64(blocker, self.no_edge_masks[piece_index]) };
 
                 let valid_moves =  self.get_moves_from_blockers(square, &slider_type, blocker);
 

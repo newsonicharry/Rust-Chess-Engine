@@ -1,6 +1,6 @@
 use crate::chess::consts;
 use crate::chess::consts::NUM_SQUARES;
-use crate::chess::precomputed::generators::helpers::{create_dynamic_mask, create_static_mask, INCLUDE_EDGE};
+use crate::precomputed::generators::helpers::{create_dynamic_mask, create_static_mask, INCLUDE_EDGE};
 use crate::chess::types::color::Color;
 use crate::chess::types::square::Square;
 

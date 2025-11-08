@@ -1,7 +1,7 @@
 use crate::chess::board::Board;
 use crate::chess::consts::PIECE_VALUES;
 use crate::chess::move_ply::MovePly;
-use crate::chess::precomputed::accessor::{bishop_lookup, queen_lookup, rook_lookup, slider_lookup, MOVEMENT_MASKS};
+use crate::precomputed::accessor::{bishop_lookup, queen_lookup, rook_lookup, slider_lookup, MOVEMENT_MASKS};
 use crate::chess::types::piece::BasePiece::{Bishop, King, Knight, Pawn, Queen, Rook};
 use crate::chess::types::piece::{BasePiece, Piece};
 use crate::chess::types::square::Square;

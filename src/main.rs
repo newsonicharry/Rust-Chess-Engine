@@ -21,12 +21,13 @@ use crate::chess::move_ply::MovePly;
 use crate::engine::arbiter::Arbiter;
 use crate::engine::eval::nnue::NNUE;
 use crate::engine::types::match_result::MatchResult;
+use crate::precomputed::data_dump::dump_bins;
 
 mod chess;
 mod general;
 mod engine;
 mod uci;
-
+pub mod precomputed;
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -39,12 +40,12 @@ const AUTHOR: &str = "Harry Phillips";
 const NAME: &str = "Generic Rust UCI Engine";
 
 fn main() {
+    // dump_bins();
     println!("{NAME} by {AUTHOR}\n");
 
     let mut current_fen: String = START_POS.to_string();
     let mut board = Board::default();
     board.new(&current_fen);
-
     let mut tt_size = 16;
     let mut tt = Arc::new(Transposition::new(tt_size));
 

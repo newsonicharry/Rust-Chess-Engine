@@ -1,6 +1,6 @@
 use crate::chess::board::Board;
 use crate::chess::move_list::MoveList;
-use crate::chess::precomputed::accessor::{bishop_lookup, queen_lookup, rook_lookup, MOVEMENT_MASKS};
+use crate::precomputed::accessor::{bishop_lookup, queen_lookup, rook_lookup, MOVEMENT_MASKS};
 use crate::chess::types::piece::BasePiece::{Bishop, Knight, Pawn, Queen, Rook};
 use crate::engine::types::match_result::MatchResult;
 use crate::general::bits;

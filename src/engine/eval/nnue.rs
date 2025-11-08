@@ -1,3 +1,6 @@
+use std::fs;
+use std::fs::File;
+use std::io::Write;
 use crate::chess::board::Board;
 use crate::chess::consts::MAX_MOVES;
 use crate::chess::move_ply::MovePly;
@@ -34,6 +37,12 @@ impl NNUE {
             let piece = board.piece_at(square);
             self.accumulator_stack[self.cur_accumulator].add_piece(piece, square);
         }
+
+        // fs::write("feature_weights.txt", format!("{:?}", MODEL.feature_weights)).expect("TODO: panic message");
+        // fs::write("feature_bias.txt", format!("{:?}", MODEL.feature_biases)).expect("TODO: panic message");
+        // fs::write("output_weights.txt", format!("{:?}", MODEL.output_weights)).expect("TODO: panic message");
+        // fs::write("output_bias.txt", format!("{:?}", MODEL.output_bias)).expect("TODO: panic message");
+
     }
     
 

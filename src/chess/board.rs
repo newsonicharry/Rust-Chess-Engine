@@ -11,8 +11,8 @@ use crate::chess::types::piece::{char_to_piece, BasePiece, Piece, ITER_BLACK, IT
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use std::fmt::Display;
-use crate::chess::precomputed::accessor::ZOBRIST;
-use crate::chess::precomputed::generators::zobrist::Zobrist;
+use crate::precomputed::accessor::ZOBRIST;
+use crate::precomputed::generators::zobrist::Zobrist;
 // use crate::chess::precomputed::accessor::ZOBRIST;
 // use crate::chess::precomputed::generators::zobrist;
 // use crate::chess::precomputed::generators::zobrist::Zobrist;

@@ -16,6 +16,7 @@ use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use crate::precomputed::accessor::LMR_REDUCTION;
 
 const INFINITY: i16 = 30000;
 
@@ -110,10 +111,14 @@ fn search(
         nnue.make_move(cur_move, board);
         board.make_move(cur_move);
 
+        let reduction = LMR_REDUCTION.reduction(depth, i as u8);
+        let lmr_depth = (depth as i16 - reduction as i16 - 1).max(0);
+
         let mut eval;
 
-        if i >= 3 && depth >= 3{
-            eval = -search(board, ply_searched+1, depth-2, -alpha - 1, -alpha, thread_data, tt, nnue, limits);
+
+        if reduction > 0 && (lmr_depth != (depth - 1) as i16)  {
+            eval = -search(board, ply_searched+1, lmr_depth as u8, -alpha - 1, -alpha, thread_data, tt, nnue, limits);
             if limits.is_hard_stop() { return 0 }
 
             if eval > alpha {

@@ -3,7 +3,6 @@ pub mod bitboard;
 pub mod consts;
 pub mod types;
 mod piece_list;
-pub mod precomputed;
 pub mod move_generator;
 pub mod move_ply;
 pub mod move_list;
