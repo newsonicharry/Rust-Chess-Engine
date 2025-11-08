@@ -1,1 +1,1 @@
-A simple chess engine built in rust that perfroms at about a ~2800 - 2850 level on CCRL.
+A simple chess engine built in rust that performs at approximatly a 2950 level on CCRL.
