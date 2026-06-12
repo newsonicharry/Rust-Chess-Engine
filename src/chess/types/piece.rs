@@ -1,7 +1,7 @@
+use crate::chess::types::color::Color;
+use crate::chess::types::piece::Piece::{BlackKing, BlackPawn, NoPiece, WhiteKing, WhitePawn};
 use std::fmt::Display;
 use std::mem;
-use crate::chess::types::color::Color;
-use crate::chess::types::piece::Piece::{BlackKing, BlackPawn, NoPiece, WhiteKing, WhitePawn, WhiteRook};
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -21,17 +21,15 @@ pub enum Piece {
     NoPiece,
 }
 
-
 impl From<(BasePiece, Color)> for Piece {
     fn from(piece_data: (BasePiece, Color)) -> Self {
         let (base_piece, color) = piece_data;
-        let raw_value = match color { 
+        let raw_value = match color {
             Color::White => base_piece as u8,
-            Color::Black => base_piece as u8+6,
+            Color::Black => base_piece as u8 + 6,
         };
-        
+
         unsafe { mem::transmute(raw_value) }
-        
     }
 }
 
@@ -52,35 +50,58 @@ impl Display for Piece {
             Piece::BlackQueen => 'q',
             Piece::BlackKing => 'k',
 
-            Piece::NoPiece => ' '
+            Piece::NoPiece => ' ',
         };
 
         write!(f, "{}", char)
-
     }
 }
 
-
-const ALL_PIECES: [Piece; 12] = [Piece::WhitePawn, Piece::WhiteKnight, Piece::WhiteBishop, Piece::WhiteRook, Piece::WhiteQueen, Piece::WhiteKing, Piece::BlackPawn, Piece::BlackKnight, Piece::BlackBishop, Piece::BlackRook, Piece::BlackQueen, Piece::BlackKing];
-const WHITE_PIECES: [Piece; 6] = [Piece::WhitePawn, Piece::WhiteKnight, Piece::WhiteBishop, Piece::WhiteRook, Piece::WhiteQueen, Piece::WhiteKing];
-const BLACK_PIECES: [Piece; 6] = [Piece::BlackPawn, Piece::BlackKnight, Piece::BlackBishop, Piece::BlackRook, Piece::BlackQueen, Piece::BlackKing];
-
+const ALL_PIECES: [Piece; 12] = [
+    Piece::WhitePawn,
+    Piece::WhiteKnight,
+    Piece::WhiteBishop,
+    Piece::WhiteRook,
+    Piece::WhiteQueen,
+    Piece::WhiteKing,
+    Piece::BlackPawn,
+    Piece::BlackKnight,
+    Piece::BlackBishop,
+    Piece::BlackRook,
+    Piece::BlackQueen,
+    Piece::BlackKing,
+];
+const WHITE_PIECES: [Piece; 6] = [
+    Piece::WhitePawn,
+    Piece::WhiteKnight,
+    Piece::WhiteBishop,
+    Piece::WhiteRook,
+    Piece::WhiteQueen,
+    Piece::WhiteKing,
+];
+const BLACK_PIECES: [Piece; 6] = [
+    Piece::BlackPawn,
+    Piece::BlackKnight,
+    Piece::BlackBishop,
+    Piece::BlackRook,
+    Piece::BlackQueen,
+    Piece::BlackKing,
+];
 
 pub const ITER_ALL: u8 = 0;
 pub const ITER_WHITE: u8 = 1;
 pub const ITER_BLACK: u8 = 2;
 
-impl Piece{
+impl Piece {
     pub fn iterator<const ITER_TYPE: u8>() -> impl Iterator<Item = Piece> {
-
         match ITER_TYPE {
             ITER_ALL => ALL_PIECES.iter().copied(),
             ITER_WHITE => WHITE_PIECES.iter().copied(),
             ITER_BLACK => BLACK_PIECES.iter().copied(),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
-    
+
     pub fn is_piece(&self) -> bool {
         *self as u8 != NoPiece as u8
     }
@@ -88,25 +109,23 @@ impl Piece{
     pub fn is_pawn(&self) -> bool {
         *self as u8 == WhitePawn as u8 || *self as u8 == BlackPawn as u8
     }
-    
-    pub fn is_king(&self) -> bool{
+
+    pub fn is_king(&self) -> bool {
         *self as u8 == WhiteKing as u8 || *self as u8 == BlackKing as u8
     }
-    
+
     pub fn color(&self) -> Color {
-        if *self as u8 >= 6 { 
-            return Color::Black
+        if *self as u8 >= 6 {
+            return Color::Black;
         }
-        
+
         Color::White
     }
 }
 
-
-
 #[derive(Copy, Clone, PartialEq)]
 #[repr(u8)]
-pub enum BasePiece{
+pub enum BasePiece {
     Pawn,
     Knight,
     Bishop,
@@ -115,15 +134,21 @@ pub enum BasePiece{
     King,
 }
 
-
-const BASE_PIECES: [BasePiece; 6] = [BasePiece::Pawn, BasePiece::Knight, BasePiece::Bishop, BasePiece::Rook, BasePiece::Queen, BasePiece::King];
+const BASE_PIECES: [BasePiece; 6] = [
+    BasePiece::Pawn,
+    BasePiece::Knight,
+    BasePiece::Bishop,
+    BasePiece::Rook,
+    BasePiece::Queen,
+    BasePiece::King,
+];
 
 impl From<Piece> for BasePiece {
     fn from(piece: Piece) -> Self {
         let piece_value = piece as u8;
         let mut no_color_piece = piece_value;
 
-        if no_color_piece >= BlackPawn as u8  {
+        if no_color_piece >= BlackPawn as u8 {
             no_color_piece -= BlackPawn as u8;
         }
 
@@ -131,7 +156,7 @@ impl From<Piece> for BasePiece {
     }
 }
 
-impl BasePiece{
+impl BasePiece {
     pub fn iterator() -> impl Iterator<Item = BasePiece> {
         BASE_PIECES.iter().copied()
     }
@@ -139,7 +164,7 @@ impl BasePiece{
 
 impl Display for BasePiece {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let char = match self{
+        let char = match self {
             BasePiece::Pawn => 'P',
             BasePiece::Knight => 'N',
             BasePiece::Bishop => 'B',
@@ -149,12 +174,10 @@ impl Display for BasePiece {
         };
 
         write!(f, "{}", char)
-
     }
 }
 
-
-pub fn char_to_piece(piece: char) -> Option<Piece>{
+pub fn char_to_piece(piece: char) -> Option<Piece> {
     match piece {
         'P' => Some(Piece::WhitePawn),
         'N' => Some(Piece::WhiteKnight),
@@ -162,14 +185,14 @@ pub fn char_to_piece(piece: char) -> Option<Piece>{
         'R' => Some(Piece::WhiteRook),
         'Q' => Some(Piece::WhiteQueen),
         'K' => Some(Piece::WhiteKing),
-        
+
         'p' => Some(Piece::BlackPawn),
         'n' => Some(Piece::BlackKnight),
         'b' => Some(Piece::BlackBishop),
         'r' => Some(Piece::BlackRook),
         'q' => Some(Piece::BlackQueen),
         'k' => Some(Piece::BlackKing),
-        
-        _ => None
+
+        _ => None,
     }
 }

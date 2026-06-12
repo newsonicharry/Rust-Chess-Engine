@@ -1,6 +1,3 @@
-use std::fs;
-use std::fs::File;
-use std::io::Write;
 use crate::chess::board::Board;
 use crate::chess::consts::MAX_MOVES;
 use crate::chess::move_ply::MovePly;
@@ -13,86 +10,102 @@ use crate::engine::eval::accumulator::Accumulator;
 use crate::engine::eval::network::*;
 use crate::general::bits;
 
-
 #[derive(Copy, Clone)]
-pub struct NNUE{
+pub struct NNUE {
     accumulator_stack: [Accumulator; MAX_MOVES],
     cur_accumulator: usize,
 }
 
-impl Default for NNUE {
-    fn default() -> Self {
-        Self{
+impl NNUE {
+    pub fn new(mut board: Board) -> Self {
+        let mut nnue = Self {
             accumulator_stack: [Accumulator::default(); MAX_MOVES],
             cur_accumulator: 0,
-        }
-    }
-}
+        };
 
-impl NNUE {
-    pub fn new(&mut self, board: &mut Board){
         board.update_occupancy();
         let squares_with_pieces = bits::all_squares(board.occupancy());
         for square in squares_with_pieces {
             let piece = board.piece_at(square);
-            self.accumulator_stack[self.cur_accumulator].add_piece(piece, square);
+            nnue.accumulator_stack[nnue.cur_accumulator].add_piece(piece, square);
         }
 
-        // fs::write("feature_weights.txt", format!("{:?}", MODEL.feature_weights)).expect("TODO: panic message");
-        // fs::write("feature_bias.txt", format!("{:?}", MODEL.feature_biases)).expect("TODO: panic message");
-        // fs::write("output_weights.txt", format!("{:?}", MODEL.output_weights)).expect("TODO: panic message");
-        // fs::write("output_bias.txt", format!("{:?}", MODEL.output_bias)).expect("TODO: panic message");
-
+        nnue
     }
-    
 
-    pub fn make_move(&mut self, played: &MovePly, board: &Board){
+    pub fn make_move(&mut self, played: &MovePly, board: &Board) {
         self.cur_accumulator += 1;
-        self.accumulator_stack[self.cur_accumulator] = self.accumulator_stack[self.cur_accumulator-1];
+        self.accumulator_stack[self.cur_accumulator] =
+            self.accumulator_stack[self.cur_accumulator - 1];
         let current_accumulator = &mut self.accumulator_stack[self.cur_accumulator];
 
-        let move_flag =  played.flag();
+        let move_flag = played.flag();
         let from = played.from();
         let to = played.to();
 
         let piece = board.piece_at(from);
-        let capture= board.piece_at(to);
+        let capture = board.piece_at(to);
 
-
-        if move_flag == MoveFlag::None{
+        if move_flag == MoveFlag::None {
             match capture.is_piece() {
                 true => current_accumulator.make_capture(piece, from, to, capture, to),
-                false => current_accumulator.move_piece(piece, from, to)
+                false => current_accumulator.move_piece(piece, from, to),
             }
-        }
-            
-        else if move_flag == MoveFlag::DoubleJump {
+        } else if move_flag == MoveFlag::DoubleJump {
             current_accumulator.move_piece(piece, from, to);
-        }
-
-        else if move_flag == CastleShort {
+        } else if move_flag == CastleShort {
             match board.side_to_move() {
-                Color::White => { current_accumulator.make_castle(WhiteKing, WhiteRook, Square::E1, Square::G1, Square::H1, Square::F1); }
-                Color::Black => { current_accumulator.make_castle(BlackKing, BlackRook, Square::E8, Square::G8, Square::H8, Square::F8); }
+                Color::White => {
+                    current_accumulator.make_castle(
+                        WhiteKing,
+                        WhiteRook,
+                        Square::E1,
+                        Square::G1,
+                        Square::H1,
+                        Square::F1,
+                    );
+                }
+                Color::Black => {
+                    current_accumulator.make_castle(
+                        BlackKing,
+                        BlackRook,
+                        Square::E8,
+                        Square::G8,
+                        Square::H8,
+                        Square::F8,
+                    );
+                }
             }
-        }
-
-        else if move_flag == CastleLong {
+        } else if move_flag == CastleLong {
             match board.side_to_move() {
-                Color::White => { current_accumulator.make_castle(WhiteKing, WhiteRook, Square::E1, Square::C1, Square::A1, Square::D1); }
-                Color::Black => { current_accumulator.make_castle(BlackKing, BlackRook, Square::E8, Square::C8, Square::A8, Square::D8); }
+                Color::White => {
+                    current_accumulator.make_castle(
+                        WhiteKing,
+                        WhiteRook,
+                        Square::E1,
+                        Square::C1,
+                        Square::A1,
+                        Square::D1,
+                    );
+                }
+                Color::Black => {
+                    current_accumulator.make_castle(
+                        BlackKing,
+                        BlackRook,
+                        Square::E8,
+                        Square::C8,
+                        Square::A8,
+                        Square::D8,
+                    );
+                }
             }
-        }
-
-        else if move_flag.is_promotion(){
+        } else if move_flag.is_promotion() {
             let promotion_piece = move_flag.promotion_piece(board.side_to_move());
-            if capture.is_piece(){
+            if capture.is_piece() {
                 current_accumulator.remove_piece(capture, to);
             }
             current_accumulator.make_promotion(piece, promotion_piece, from, to);
-        }
-
-        else if move_flag == MoveFlag::EnPassantCapture {
+        } else if move_flag == MoveFlag::EnPassantCapture {
             let enemy_pawn_square = match board.side_to_move() {
                 Color::White => Square::from(board.en_passant_file().unwrap() as u8 + 32),
                 Color::Black => Square::from(board.en_passant_file().unwrap() as u8 + 24),
@@ -102,14 +115,12 @@ impl NNUE {
 
             current_accumulator.make_capture(piece, from, to, enemy_pawn, enemy_pawn_square);
         }
-
-
     }
 
-    pub fn undo_move(&mut self){
+    pub fn undo_move(&mut self) {
         self.cur_accumulator -= 1;
     }
-    
+
     fn squared_crelu(value: i16) -> i32 {
         (value as i32).clamp(CR_MIN, CR_MAX).pow(2)
     }
@@ -123,7 +134,7 @@ impl NNUE {
         };
 
         let mut out = 0;
-        for (&value, &weight) in us.zip(&MODEL.output_weights[..HIDDEN_SIZE]) {
+        for (&value, &weight) in us.zip(&MODEL.output_weights) {
             out += Self::squared_crelu(value) * weight as i32;
         }
         for (&value, &weight) in them.zip(&MODEL.output_weights[HIDDEN_SIZE..]) {
@@ -133,5 +144,3 @@ impl NNUE {
         ((out / QA + MODEL.output_bias as i32) * EVAL_SCALE / QAB) as i16
     }
 }
-
-

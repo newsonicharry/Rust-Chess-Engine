@@ -1,6 +1,7 @@
 cargo-features = ["profile-rustflags"]
-[toolchain]
-channel = "nightly"
+
+# [toolchain]
+# channel = "nightly"
 
 [package]
 name = "ChessEngine"
@@ -9,15 +10,18 @@ edition = "2024"
 
 [dependencies]
 rand = "0.7.2"
+portable-atomic = { version = "1.0", features = ["fallback"] }
 
+# [build]
+# rustflags = ["-C", "target-feature=+cx16"]
 
 [profile.release]
 target-cpu = "native"
 opt-level = 3
 lto = "thin"
-rustflags = [
-    "-C", "link-arg=-Wl,--stack,64000000",
-    "-C", "target-cpu=native"
-]
+# rustflags = [
+    # "-C", "link-arg=-Wl,--stack,64000000",
+    # "-C", "target-cpu=native"
+# ]
 
 

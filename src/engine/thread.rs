@@ -1,9 +1,12 @@
+use crate::chess::consts;
+use crate::chess::move_ply::MovePly;
 use crate::engine::counter_move_heuristics::CounterMoveHeuristics;
 use crate::engine::history_heuristics::HistoryHeuristics;
 use crate::engine::killers::Killers;
 
-
-pub struct ThreadData{
+pub struct ThreadData {
+    // pub board: Board,
+    // pub search_stack: [MovePly; consts::MAX_DEPTH],
     pub killers: Killers,
     pub history_heuristics: HistoryHeuristics,
     pub counter_move_heuristics: CounterMoveHeuristics,
@@ -12,7 +15,7 @@ pub struct ThreadData{
 
 impl Default for ThreadData {
     fn default() -> Self {
-        Self{
+        Self {
             killers: Killers::default(),
             history_heuristics: HistoryHeuristics::default(),
             counter_move_heuristics: CounterMoveHeuristics::default(),

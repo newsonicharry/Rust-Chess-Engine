@@ -1,15 +1,15 @@
-use std::collections::HashSet;
-use crate::chess::consts::{NUM_SQUARES, NUM_DIAGONAL_ENTRIES, NUM_ORTHOGONAL_ENTRIES, ROOK_DIRECTIONS, BISHOP_DIRECTIONS};
-use crate::precomputed::generators::helpers::{create_dynamic_mask, NO_EDGE};
-use crate::chess::types::square::Square;
-use rand::Rng;
+use crate::chess::consts::{
+    BISHOP_DIRECTIONS, NUM_DIAGONAL_ENTRIES, NUM_ORTHOGONAL_ENTRIES, NUM_SQUARES, ROOK_DIRECTIONS,
+};
 use crate::chess::types::file::File;
 use crate::chess::types::rank::Rank;
+use crate::chess::types::square::Square;
 use crate::general::bits;
+use crate::precomputed::generators::helpers::{NO_EDGE, create_dynamic_mask};
+use rand::Rng;
+use std::collections::HashSet;
 
-
-
-enum SliderType{
+enum SliderType {
     Orthogonal,
     Diagonal,
 }
@@ -25,8 +25,8 @@ pub struct SliderLookup<const NUM_ENTRIES: usize> {
 }
 
 impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
-    pub fn new() -> Self{
-        let mut lookup = SliderLookup{
+    pub fn new() -> Self {
+        let mut lookup = SliderLookup {
             flat_table: [0; NUM_ENTRIES],
             offsets: [0; NUM_SQUARES],
 
@@ -34,20 +34,18 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
             magics: [0; NUM_SQUARES],
 
             no_edge_masks: [0; NUM_SQUARES],
-
         };
 
         let slider_type = match NUM_ENTRIES {
             NUM_DIAGONAL_ENTRIES => SliderType::Diagonal,
             NUM_ORTHOGONAL_ENTRIES => SliderType::Orthogonal,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let piece_direction = match slider_type {
             SliderType::Diagonal => BISHOP_DIRECTIONS,
             SliderType::Orthogonal => ROOK_DIRECTIONS,
         };
-
 
         for i in 0..NUM_SQUARES {
             let square = Square::from(i as u8);
@@ -57,32 +55,22 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
             let (magic, shift) = lookup.find_magic_and_shift(square);
             lookup.magics[i] = magic;
             lookup.shifts[i] = shift;
-
         }
-
 
         lookup.generate_move_lookup(slider_type);
 
         lookup
-
     }
 
-
-
-
-
-    fn generate_move_lookup(&mut self, slider_type: SliderType){
-
+    fn generate_move_lookup(&mut self, slider_type: SliderType) {
         let mut last_offset = 0;
 
-        for (piece_index, piece_move_mask) in self.no_edge_masks.iter().enumerate(){
-
+        for (piece_index, piece_move_mask) in self.no_edge_masks.iter().enumerate() {
             let square = Square::from(piece_index as u8);
             let blockers = self.generate_blockers(square);
 
             let num_blockers = bits::count(*piece_move_mask);
             let blocker_combinations = 1 << num_blockers;
-
 
             for blocker in blockers {
                 let magic = self.magics[piece_index];
@@ -90,7 +78,7 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
                 let key = blocker.wrapping_mul(magic) >> shift;
                 // let key = unsafe { std::arch::x86_64::_pext_u64(blocker, self.no_edge_masks[piece_index]) };
 
-                let valid_moves =  self.get_moves_from_blockers(square, &slider_type, blocker);
+                let valid_moves = self.get_moves_from_blockers(square, &slider_type, blocker);
 
                 self.flat_table[key as usize + last_offset] = valid_moves;
             }
@@ -100,10 +88,12 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
         }
     }
 
-
-
-    fn get_moves_from_blockers(&self, square: Square, slider_type: &SliderType, blockers: u64) -> u64{
-
+    fn get_moves_from_blockers(
+        &self,
+        square: Square,
+        slider_type: &SliderType,
+        blockers: u64,
+    ) -> u64 {
         let directions = match slider_type {
             SliderType::Diagonal => BISHOP_DIRECTIONS,
             SliderType::Orthogonal => ROOK_DIRECTIONS,
@@ -111,7 +101,7 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
 
         let mut new_movement_mask: u64 = 0;
 
-        for direction in directions{
+        for direction in directions {
             let x_dir = direction.0;
             let y_dir = direction.1;
 
@@ -120,13 +110,12 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
 
             let mut directional_move_mask: u64 = 0;
 
-            loop{
-
+            loop {
                 x_pos += x_dir;
                 y_pos += y_dir;
 
-                if  (x_pos > 7 || x_pos < 0) || (y_pos > 7 || y_pos < 0) {
-                    break
+                if (x_pos > 7 || x_pos < 0) || (y_pos > 7 || y_pos < 0) {
+                    break;
                 }
 
                 let file = File::from(x_pos as u8);
@@ -137,21 +126,17 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
 
                 let test_x = x_pos + x_dir;
                 let test_y = y_pos + y_dir;
-                let end_of_board =(test_x > 7 || test_x < 0) || (test_y > 7 || test_y < 0);
+                let end_of_board = (test_x > 7 || test_x < 0) || (test_y > 7 || test_y < 0);
 
                 if directional_move_mask & blockers != 0 || end_of_board {
                     new_movement_mask |= directional_move_mask;
-                    break
+                    break;
                 }
-
             }
-
         }
 
         new_movement_mask
-
     }
-
 
     pub fn generate_blockers(&self, square: Square) -> Box<[u64]> {
         let no_edge_mask = self.no_edge_masks[square as usize];
@@ -161,59 +146,50 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
         let mut all_blocker_patters = vec![0u64; total_blocker_patters];
 
         for pattern_index in 0..total_blocker_patters {
-            for square_index in 0..squares.len(){
+            for square_index in 0..squares.len() {
                 let bit = (pattern_index >> square_index) & 1;
 
                 let current_move = squares.get(square_index).unwrap();
 
                 all_blocker_patters[pattern_index] |= (bit << *current_move as u64) as u64;
             }
-
         }
 
         all_blocker_patters.into_boxed_slice()
-
     }
 
-
-
-    fn find_magic_and_shift(&self, square: Square) -> (u64, u8){
-
-        let no_edge_mask= self.no_edge_masks[square as usize];
+    fn find_magic_and_shift(&self, square: Square) -> (u64, u8) {
+        let no_edge_mask = self.no_edge_masks[square as usize];
 
         let num_blockers = bits::count(no_edge_mask);
 
         let blockers = self.generate_blockers(square);
 
-        let mut final_magic: u64 = 0;
-
+        let final_magic: u64;
 
         loop {
             let mut all_keys = HashSet::with_capacity(blockers.len());
 
-            let magic: u64 = rand::thread_rng().r#gen::<u64>() & rand::thread_rng().r#gen::<u64>() & rand::thread_rng().r#gen::<u64>();
+            let magic: u64 = rand::thread_rng().r#gen::<u64>()
+                & rand::thread_rng().r#gen::<u64>()
+                & rand::thread_rng().r#gen::<u64>();
 
-            for blocker in blockers.iter(){
+            for blocker in blockers.iter() {
                 let new_key = blocker.wrapping_mul(magic) >> (64 - num_blockers);
 
                 if !all_keys.contains(&new_key) {
                     all_keys.insert(new_key);
-                }
-                else {
+                } else {
                     break;
                 }
-
             }
 
-            if all_keys.len() == blockers.len() { final_magic = magic; break; }
-
+            if all_keys.len() == blockers.len() {
+                final_magic = magic;
+                break;
+            }
         }
 
         (final_magic, 64 - num_blockers)
-
-
     }
-
-
-
 }

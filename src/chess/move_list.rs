@@ -1,22 +1,19 @@
-use std::cmp::Reverse;
-use std::slice::Iter;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::square::Square;
 use crate::general::bits;
+use std::cmp::Reverse;
+use std::slice::Iter;
 
 #[derive(Clone, Copy)]
-pub struct MoveList{ 
+pub struct MoveList {
     moves: [MovePly; 256],
     move_count: usize,
 }
 
-
 impl Default for MoveList {
     fn default() -> Self {
-        MoveList{
+        MoveList {
             moves: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
             move_count: 0,
         }
@@ -40,16 +37,18 @@ impl MoveList {
             let to_square = Square::from(bits::next(to_mask));
 
             self.moves[self.move_count] = MovePly::new(from, to_square, MoveFlag::PromoteToKnight);
-            self.moves[self.move_count + 1] = MovePly::new(from, to_square, MoveFlag::PromoteToBishop);
-            self.moves[self.move_count + 2] = MovePly::new(from, to_square, MoveFlag::PromoteToRook);
-            self.moves[self.move_count + 3] = MovePly::new(from, to_square, MoveFlag::PromoteToQueen);
+            self.moves[self.move_count + 1] =
+                MovePly::new(from, to_square, MoveFlag::PromoteToBishop);
+            self.moves[self.move_count + 2] =
+                MovePly::new(from, to_square, MoveFlag::PromoteToRook);
+            self.moves[self.move_count + 3] =
+                MovePly::new(from, to_square, MoveFlag::PromoteToQueen);
 
             self.move_count += 4;
 
             to_mask = bits::pop(to_mask);
         }
     }
-
 
     pub fn move_count(&self) -> usize {
         self.move_count
@@ -60,13 +59,10 @@ impl MoveList {
     }
 
     pub fn iter(&self) -> Iter<'_, MovePly> {
-
         self.moves[..self.move_count].iter()
-
-        
     }
 
-    pub fn order_moves(&mut self, orderings: &[i16; 256]){
+    pub fn order_moves(&mut self, orderings: &[i16; 256]) {
         let mut indices = [0usize; 256];
         for i in 0..self.move_count {
             indices[i] = i;
@@ -89,8 +85,5 @@ impl MoveList {
         }
 
         false
-
     }
-
-
 }
