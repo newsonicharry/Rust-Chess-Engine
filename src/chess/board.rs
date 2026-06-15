@@ -123,6 +123,23 @@ impl Board {
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
+    pub fn is_repetition(&self) -> bool {
+        let Some(board_states) = self.past_board_states() else {
+            return false;
+        };
+
+        for board_state in board_states.iter().rev().skip(0).step_by(1) {
+            if board_state.zobrist == self.zobrist {
+                return true;
+            }
+
+            if self.half_move_clock == 0 {
+                return false;
+            }
+        }
+        return false;
+    }
+
     pub fn set_in_check(&mut self, in_check: bool) {
         self.in_check = in_check;
     }
@@ -238,7 +255,7 @@ impl Board {
 
     pub fn past_board_states(&self) -> Option<&[BoardState]> {
         if self.cur_board_state > 0 {
-            return Some(&self.board_states[..(self.cur_board_state - 1)]);
+            return Some(&self.board_states[..(self.cur_board_state)]);
         }
 
         None
@@ -428,20 +445,27 @@ impl Board {
     }
 
     fn update_castling_rights(&mut self, from: Square, to: Square) {
+        let previous_rights = self.castling_rights;
+
         self.castling_rights &= SQUARE_MOVED_CASTLING[from as usize];
         self.castling_rights &= SQUARE_MOVED_CASTLING[to as usize];
 
-        // remove white king castling rights if king moves
-        if from == Square::E1 || from == Square::E8 {
-            self.zobrist ^= ZOBRIST.short_castle(self.side_to_move);
-            self.zobrist ^= ZOBRIST.long_castle(self.side_to_move);
+        if self.castling_rights == previous_rights {
+            return;
         }
 
-        // if an enemy piece takes a friendly piece
-        if to == Square::H1 || to == Square::H8 {
-            self.zobrist ^= ZOBRIST.short_castle(self.side_to_move);
-        } else if to == Square::A1 || to == Square::A8 {
-            self.zobrist ^= ZOBRIST.long_castle(self.side_to_move);
+        if previous_rights & 0b0001 != 0 && self.castling_rights & 0b0001 == 0 {
+            self.zobrist ^= ZOBRIST.short_castle(Color::White);
+        }
+        if previous_rights & 0b0010 != 0 && self.castling_rights & 0b0010 == 0 {
+            self.zobrist ^= ZOBRIST.long_castle(Color::White);
+        }
+
+        if previous_rights & 0b0100 != 0 && self.castling_rights & 0b0100 == 0 {
+            self.zobrist ^= ZOBRIST.short_castle(Color::Black);
+        }
+        if previous_rights & 0b1000 != 0 && self.castling_rights & 0b1000 == 0 {
+            self.zobrist ^= ZOBRIST.long_castle(Color::Black);
         }
     }
 
@@ -454,7 +478,11 @@ impl Board {
 
         self.push_board_state(*played, capture);
 
+        if self.can_en_passant {
+            self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
+        }
         self.can_en_passant = false;
+
         if capture.is_piece() {
             self.remove_piece::<INCREMENT_ZOBRIST>(capture, to);
         }
@@ -465,10 +493,7 @@ impl Board {
             self.half_move_clock += 1;
         }
 
-        self.castling_rights &= SQUARE_MOVED_CASTLING[from as usize];
-        self.castling_rights &= SQUARE_MOVED_CASTLING[to as usize];
-
-        // self.update_castling_rights(from, to);
+        self.update_castling_rights(from, to);
 
         match played.flag() {
             MoveFlag::None => self.apply_quiet(played),
@@ -550,22 +575,22 @@ impl Display for Board {
         for i in 0..NUM_SQUARES {
             if i % 8 == 0 {
                 if i != 0 {
-                    pretty_print += &*(SIDE_BAR.to_owned() + "\n" + MIDDLE_SECTION + "\n");
+                    pretty_print += &(SIDE_BAR.to_owned() + "\n" + MIDDLE_SECTION + "\n");
                 } else {
                     pretty_print += "\n";
                 }
 
-                pretty_print += &*(" ".to_owned() + &*((i ^ 56) / 8 + 1).to_string() + "  ");
+                pretty_print += &(" ".to_owned() + &((i ^ 56) / 8 + 1).to_string() + "  ");
             }
 
             let square = Square::from((i ^ 56) as u8);
             let piece = self.piece_at(square);
             let piece_as_str = piece.to_string();
 
-            pretty_print += &*(SIDE_BAR.to_owned() + "  " + piece_as_str.as_str() + "  ");
+            pretty_print += &(SIDE_BAR.to_owned() + "  " + piece_as_str.as_str() + "  ");
         }
 
-        pretty_print += &*(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL + "\n");
+        pretty_print += &(SIDE_BAR.to_owned() + "\n" + BOTTOM_SECTION + "\n" + FILE_LABEL + "\n");
 
         write!(f, "{}", pretty_print)
     }

@@ -262,6 +262,12 @@ impl UCIParser {
     }
 
     pub fn parse(message: &str) -> Commands {
+        let message = message
+            .to_string()
+            .chars()
+            .filter(|x| *x != '\n')
+            .collect::<String>();
+
         let split_message: Vec<_> = message.split_whitespace().collect();
 
         match split_message.get(0) {

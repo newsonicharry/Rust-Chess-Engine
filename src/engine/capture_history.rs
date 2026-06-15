@@ -1,5 +1,5 @@
 use crate::chess::board::Board;
-use crate::chess::consts::{self, MAX_DEPTH};
+use crate::chess::consts::{self};
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::piece::{BasePiece, Piece};
 use crate::chess::types::square::Square;

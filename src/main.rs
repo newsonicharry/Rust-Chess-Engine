@@ -4,19 +4,16 @@ use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
-use crate::chess::move_ply::uci_move_parser;
 use crate::chess::types::color::Color;
 use crate::engine::arbiter::Arbiter;
-use crate::engine::eval::nnue::NNUE;
 use crate::engine::search::Searcher;
 use crate::engine::search_limits::SearchLimits;
-use crate::engine::transposition::TTEntry;
 use crate::engine::transposition::Transposition;
 use crate::engine::types::match_result::MatchResult;
-use crate::precomputed::data_dump::dump_bins;
 use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
 use crate::uci::parser;
+use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::process::exit;
@@ -29,13 +26,6 @@ mod general;
 pub mod precomputed;
 mod uci;
 
-/*
-a8a7 d8d7 a7a8 d7d8 a8a7 c8d7 a7a8 d7c8 a6a7 d6d7 a7a6 d4d3 h2g3 b3b5 g7a7 e6d6 c7g7 f7e6 c8c7 g8f7 c7c8 h7g8 c1c7 f3b3 g3d6 f8f3 d3f3 f4f3 h4g3 f5f4 g3h4 h5h4 d1c1 d5f5 f2g3 e8f8 d2d1 d7d6 e1f2 a8e8 b1d3 h8h7 d3d2 h7h5 a2b1 f8a8 f2e1 g8h8 d2a2 b5d7 e1f2 d7d5 d1d2 b7d7 d2e1 b8f8 e3f3 d5b5 e1e3 f7b7 g1h2 a7a5 c1d2 b7d5 c4d5 d6d5 b2b3 b6b7 a3d3 c5d4 f3d4 f8f7 d5f7 f5d4 a1a3 d8b6 a6b7 a8b8 a5a6 e6f7 e4d5 c7d5 a4a5 c8e6 c3d5 e6d5 f1e1 h6f5 d3e4 f5e4 h2h3 e7e6 b1c3 e8g8 c2c4 f7f5 e1g1 g8h6 f1d3 a6c7 g1f3 b8a6 a2a4 d7d6 d4d5 c7c5 f2f4 f8g7 e2e4 g7g6 d2d4
-
-d7e8 h5g4 e8d7 g4h5 d7e8 h5g4 e8d7 g4h5 c6d8 d4d5 d8e8 f1f2 g3f2 f3g4 h4g3 c1g5 h5h4 g2f3 g4f3 h2h3 c8g4 e3e4 e8g8 b2c3 b4c3 e1g1 c5b4 d2d4 g8e7 e2e3 d7d6 b1c3 f8c5 g1f3 h7h5 f1g2 b8c6 g2g3 e7e5 c2c4
-
-*/
-
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 const HELP_MSG: &str = "\nA fairly generic rust engine supporting the UCI protocol.\n\
@@ -47,63 +37,23 @@ const AUTHOR: &str = "Harry Phillips";
 const NAME: &str = "Generic Rust UCI Engine";
 
 fn main() {
-    // let moves = "d7e8 h5g4 e8d7 g4h5 d7e8 h5g4 e8d7 g4h5 c6d8 d4d5 d8e8 f1f2 g3f2 f3g4 h4g3 c1g5 h5h4 g2f3 g4f3 h2h3 c8g4 e3e4 e8g8 b2c3 b4c3 e1g1 c5b4 d2d4 g8e7 e2e3 d7d6 b1c3 f8c5 g1f3 h7h5 f1g2 b8c6 g2g3 e7e5 c2c4";
-
-    // let mut board = Board::default();
-    // board.new(START_POS);
-
-    // let mut tt = Arc::new(Transposition::new(16));
-    // // let search_limits = SearchLimits::new(1000, 1000);
-
-    // for (index, str_move) in moves.split_whitespace().rev().enumerate() {
-    //     let mv = uci_move_parser(str_move, &board);
-    //     println!("{}", board.zobrist());
-
-    //     println!("{board}");
-
-    //     println!("{index}");
-
-    //     if index >= 36 {
-    //         let search_limits = if index == 38 {
-    //             SearchLimits::new(1000, 1000)
-    //         } else {
-    //             SearchLimits::new(1000, 1000)
-    //         };
-    //         let mut searcher = Searcher::new(&tt, &board, &search_limits);
-    //         searcher.search_start(0);
-
-    //         // tt = Arc::new(Transposition::new(16));
-    //     }
-
-    //     board.make_move(&mv);
-    // }
-
-    // let mut searcher = Searcher::new(&tt, &board, &SearchLimits::new(1000, 1000));
-    // searcher.search_start(0);
-
-    // board.undo_move();
-    // board.undo_move();
-
-    // println!("{}", board.zobrist());
-
-    // let mut move_list = MoveList::default();
-    // MoveGenerator::<GEN_ALL>::generate(&mut board, &mut move_list);
-    // let position_result = Arbiter::arbitrate(&board, &move_list);
-
-    // println!("{:?}", position_result);
-
-    // println!("{board}");
-
-    // return;
     // run_self_play();
+    // return;
+
     // dump_bins();
     // println!("{}", std::mem::size_of::<TTEntry>());
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && args[1] == "pgo-test" {
+        run_self_play();
+        return;
+    }
+
     println!("{NAME} by {AUTHOR}\n");
 
     let mut current_fen: String = START_POS.to_string();
     let mut board = Board::default();
     board.new(&current_fen);
-    let mut tt_size = 16;
+    let mut tt_size = 64;
     let mut tt = Arc::new(Transposition::new(tt_size));
 
     let mut num_threads = 1;
@@ -132,7 +82,9 @@ fn main() {
                 board.new(&current_fen);
             }
 
-            Commands::Perft { depth } => perft(&mut board, depth as u8),
+            Commands::Perft { depth } => {
+                perft(&mut board, depth as u8);
+            }
 
             Commands::Position { fen, moves } => {
                 current_fen = fen;
@@ -190,9 +142,7 @@ fn main() {
 
                 let search_limits = SearchLimits::new(hard_think_time, soft_think_time);
 
-                let mut searcher = Searcher::new(&tt, &board, &search_limits);
-                searcher.search_start(num_threads);
-                // Searcher::search_start(num_threads, board, &tt, &search_limits);
+                Searcher::search_start(&tt, &board, &search_limits, num_threads);
             }
 
             Commands::SetOption { options_type } => match options_type {
@@ -215,7 +165,7 @@ fn main() {
 
             Commands::Unknown(line) => {
                 if line != "\r\n" {
-                    println!("Unknown command: '{line}'. Type help for more information.")
+                    println!("Unknown command: '{line}'. Type help for more information.\n")
                 }
             }
 
@@ -224,27 +174,83 @@ fn main() {
     }
 }
 
-fn perft(board: &mut Board, depth: u8) {
-    fn search(board: &mut Board, depth: u8, mut num_nodes: u128) -> u128 {
-        // if depth == 0 {
-        //     return 1;
-        // }
+struct PerftTT {
+    entries: Box<[u128]>,
+}
+
+impl PerftTT {
+    pub fn new(mb_size: usize) -> Self {
+        let size_as_bytes = mb_size * 1024 * 1024;
+        let num_entries = size_as_bytes / 16; // 16 bytes per entry 
+        let entries: Box<[u128]> = vec![0; num_entries].into_boxed_slice();
+        Self { entries }
+    }
+
+    fn zobrist_from_entry(entry: u128) -> u64 {
+        (entry >> 64) as u64
+    }
+
+    fn num_nodes_from_entry(entry: u128) -> u64 {
+        (entry as u64) >> 4
+    }
+
+    pub fn probe(&self, zobrist: u64, depth: u8) -> Option<u64> {
+        let index = (zobrist & (self.entries.len() as u64 - 1)) as usize;
+        let entry = self.entries[index];
+
+        if Self::zobrist_from_entry(entry) == zobrist && (entry as u8 & 0b1111) == depth {
+            return Some(Self::num_nodes_from_entry(entry));
+        }
+
+        None
+    }
+
+    pub fn update(&mut self, zobrist: u64, num_nodes: u64, depth: u8) {
+        let index = (zobrist & (self.entries.len() as u64 - 1)) as usize;
+        let entry = self.entries[index];
+
+        if Self::zobrist_from_entry(entry) == 0 || depth >= (entry as u8 & 0b1111) {
+            self.entries[index] = ((zobrist as u128) << 64)
+                | ((num_nodes as u64) << 4) as u128
+                | (depth & 0b1111) as u128;
+        }
+    }
+}
+
+fn perft(board: &mut Board, depth: u8) -> u64 {
+    fn search(
+        board: &mut Board,
+        depth: u8,
+        mut num_nodes: u64,
+        transposition: &mut PerftTT,
+        use_tt: bool,
+    ) -> u64 {
+        if let Some(tt_nodes) = transposition.probe(board.zobrist(), depth)
+            && use_tt
+        {
+            return tt_nodes;
+        }
 
         let mut move_list = MoveList::default();
         MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
 
         if depth == 1 {
-            return move_list.move_count() as u128;
+            return move_list.move_count() as u64;
         }
 
         for cur_move in move_list.iter() {
             board.make_move(cur_move);
-            num_nodes += search(board, depth - 1, 0);
+            let search_nodes = search(board, depth - 1, 0, transposition, use_tt);
+            transposition.update(board.zobrist(), search_nodes, depth - 1);
+            num_nodes += search_nodes;
+
             board.undo_move();
         }
 
         num_nodes
     }
+
+    let mut transposition = PerftTT::new(128);
 
     let mut start_pos_moves = MoveList::default();
     MoveGenerator::<GEN_ALL>::generate(board, &mut start_pos_moves);
@@ -254,11 +260,11 @@ fn perft(board: &mut Board, depth: u8) {
     let mut all_nodes = 0;
 
     if depth == 1 {
-        all_nodes = search(board, depth, 0)
+        all_nodes = search(board, depth, 0, &mut transposition, true)
     } else {
         for cur_move in start_pos_moves.iter() {
             board.make_move(cur_move);
-            let num_nodes = search(board, depth - 1, 0);
+            let num_nodes = search(board, depth - 1, 0, &mut transposition, true);
             all_nodes += num_nodes;
             board.undo_move();
             println!("{cur_move}: {num_nodes}");
@@ -271,6 +277,41 @@ fn perft(board: &mut Board, depth: u8) {
     println!("\nNodes searched: {all_nodes}");
     println!("Nodes per second: {nodes_per_second:.0}");
     println!("Seconds elapsed: {elapsed:.3}\n");
+
+    all_nodes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_perft() {
+        let mut board = Board::default();
+
+        board.new("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        assert_eq!(perft(&mut board, 7), 3_195_901_860);
+
+        board = Board::default();
+        board.new("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+        assert_eq!(perft(&mut board, 5), 193_690_690);
+
+        board = Board::default();
+        board.new("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
+        assert_eq!(perft(&mut board, 8), 3_009_794_393);
+
+        board = Board::default();
+        board.new("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
+        assert_eq!(perft(&mut board, 6), 706_045_033);
+
+        board = Board::default();
+        board.new("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+        assert_eq!(perft(&mut board, 5), 89_941_194);
+
+        board = Board::default();
+        board.new("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
+        assert_eq!(perft(&mut board, 6), 6_923_051_137);
+    }
 }
 
 // test code in case i need to check if something is broken
@@ -283,12 +324,16 @@ pub fn run_self_play() {
     fen_file.read_to_string(&mut string).unwrap();
     let all_fens = string.split("\n").collect::<Vec<&str>>();
 
-    for fen in all_fens {
+    for fen in all_fens.iter() {
         let tt = Arc::new(Transposition::new(16));
 
         let mut uci_moves_played: Vec<MovePly> = Vec::new();
-        println!("fen: {fen}");
-        loop {
+
+        for i in 0.. {
+            if i > 30 {
+                return;
+            }
+
             let mut board = Board::default();
             board.new(fen);
 
@@ -296,10 +341,13 @@ pub fn run_self_play() {
                 board.make_move(uci_move);
             }
 
+            // println!("{board}");
+
             let mut valid_moves = MoveList::default();
             MoveGenerator::<GEN_ALL>::generate(&mut board, &mut valid_moves);
 
             let match_result = Arbiter::arbitrate(&mut board, &mut valid_moves);
+
             match match_result {
                 MatchResult::Loss | MatchResult::Draw => break,
                 MatchResult::NoResult => {}
@@ -310,7 +358,8 @@ pub fn run_self_play() {
 
             uci_moves_played.push(move_played);
             println!("{move_played}");
+
+            tt.age();
         }
     }
-    println!("{}", string);
 }

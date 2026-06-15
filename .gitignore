@@ -1,1 +1,3 @@
 target/
+chess_tests/
+pgo.sh

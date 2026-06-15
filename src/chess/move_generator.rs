@@ -4,7 +4,7 @@ use crate::chess::move_list::MoveList;
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::piece::BasePiece;
-use crate::chess::types::piece::BasePiece::{Bishop, King, Knight, Pawn, Queen, Rook};
+use crate::chess::types::piece::BasePiece::{Bishop, Knight, Pawn, Queen, Rook};
 use crate::chess::types::square::Square;
 use crate::general::bits;
 use crate::precomputed::accessor::{
@@ -59,8 +59,6 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             BasePiece::Rook => rook_lookup(square, all_pieces_no_king),
             BasePiece::Queen => queen_lookup(square, all_pieces_no_king),
             BasePiece::King => MOVEMENT_MASKS.king[square as usize],
-
-            _ => 0,
         }
     }
 

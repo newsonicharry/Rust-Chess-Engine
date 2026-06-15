@@ -11,26 +11,22 @@ use crate::engine::arbiter::Arbiter;
 use crate::engine::capture_history::CaptureHeuristics;
 use crate::engine::counter_move_heuristics::CounterMoveHeuristics;
 use crate::engine::eval::nnue::NNUE;
-use crate::engine::history_heuristics::HistoryHeuristics;
-use crate::engine::killers::Killers;
-use crate::engine::search_funcs::{move_is_capture, move_is_quiet, see};
+use crate::engine::search_funcs::{move_is_capture, see};
 use crate::engine::search_limits::SearchLimits;
-use crate::engine::thread::ThreadData;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
 use crate::engine::types::tt_flag::TTFlag;
 use crate::precomputed::accessor::LMR_REDUCTION;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::thread;
 
 const INFINITY: i16 = 30000;
 
 pub struct Searcher {
     board: Board,
     search_stack: [MovePly; consts::MAX_DEPTH],
-    killers: Killers,
     capture_heuristics: CaptureHeuristics,
-    history_heuristics: HistoryHeuristics,
     counter_move_heuristics: CounterMoveHeuristics,
     nodes: u128,
     tt: Arc<Transposition>,
@@ -50,15 +46,23 @@ impl Searcher {
         Self {
             board: board.clone(),
             search_stack: [MovePly::default(); consts::MAX_DEPTH],
-            killers: Killers::default(),
             capture_heuristics: CaptureHeuristics::default(),
-            history_heuristics: HistoryHeuristics::default(),
             counter_move_heuristics: CounterMoveHeuristics::default(),
             nodes: 0,
             tt: Arc::clone(transposition),
             nnue: NNUE::new(board.clone()),
             search_limits: search_limits.clone(),
         }
+    }
+
+    fn adjust_mate_distance(mut eval: i16, ply: u8) -> i16 {
+        if eval > 29000 {
+            eval -= ply as i16;
+        } else if eval < -29000 {
+            eval += ply as i16;
+        }
+
+        eval
     }
 
     fn search<const ROOT: bool>(
@@ -72,34 +76,24 @@ impl Searcher {
             return 0;
         }
 
-        self.nodes += 1;
+        // let mating_value = INFINITY - ply as i16;
+        // if mating_value < beta {
+        //     beta = mating_value;
+        //     if alpha >= beta {
+        //         return beta;
+        //     }
+        // }
 
-        let tt_entry = self.tt.probe(self.board.zobrist());
-        if let Some(entry) = tt_entry
-            && entry.depth >= depth
-        {
-            match entry.tt_flag {
-                TTFlag::Exact => {
-                    if ply == 0 {
-                        self.tt
-                            .best_move
-                            .store(entry.cur_move.packed_data(), Ordering::Relaxed);
-                        self.tt.best_move_score.store(entry.eval, Ordering::Relaxed);
-                    }
+        // let mated_value = -INFINITY + ply as i16;
+        // if mated_value > alpha {
+        //     alpha = mated_value;
+        //     if alpha >= beta {
+        //         return alpha;
+        //     }
+        // }
 
-                    return entry.eval;
-                }
-                TTFlag::Upper => {
-                    if entry.eval <= alpha {
-                        return entry.eval;
-                    }
-                }
-                TTFlag::Lower => {
-                    if entry.eval >= beta {
-                        return entry.eval;
-                    }
-                }
-            }
+        if self.board.in_check() {
+            depth += 1;
         }
 
         let mut move_list = MoveList::default();
@@ -112,8 +106,51 @@ impl Searcher {
             MatchResult::NoResult => {}
         }
 
-        if self.board.in_check() {
-            depth += 1;
+        if depth == 0 {
+            return self.quiescence_search(ply, 8, alpha, beta);
+        }
+
+        self.nodes += 1;
+
+        let tt_entry = self.tt.probe(self.board.zobrist());
+        if let Some(entry) = tt_entry
+            && entry.depth >= depth
+            && !ROOT
+        {
+            match entry.tt_flag {
+                TTFlag::Exact => {
+                    if self.board.is_repetition() {
+                        return -50;
+                    }
+
+                    if ply == 0 {
+                        self.tt
+                            .best_move
+                            .store(entry.cur_move.packed_data(), Ordering::Relaxed);
+                        self.tt.best_move_score.store(entry.eval, Ordering::Relaxed);
+                    }
+
+                    return Self::adjust_mate_distance(entry.eval, ply);
+                }
+                TTFlag::Upper => {
+                    if entry.eval <= alpha {
+                        if self.board.is_repetition() {
+                            return -50;
+                        }
+
+                        return Self::adjust_mate_distance(entry.eval, ply);
+                    }
+                }
+                TTFlag::Lower => {
+                    if entry.eval >= beta {
+                        if self.board.is_repetition() {
+                            return -50;
+                        }
+
+                        return Self::adjust_mate_distance(entry.eval, ply);
+                    }
+                }
+            }
         }
 
         let pv_node = alpha != beta - 1;
@@ -134,9 +171,13 @@ impl Searcher {
         {
             self.board.make_null_move();
 
-            let reduction = 3;
+            // let reduction = 3;
 
-            let new_depth = (depth as i16 - 1 - reduction).max(0) as u8;
+            // performs identically to the original reduction,
+            // but may improve elo at higher depths in the future
+            let reduction = 2 + depth / 5;
+            let new_depth = depth.saturating_sub(reduction + 1);
+
             let score = -self.search::<NOT_ROOT>(ply + 1, new_depth, -beta, -beta + 1);
 
             if self.search_limits.is_hard_stop() {
@@ -148,11 +189,6 @@ impl Searcher {
             if score >= beta {
                 return beta;
             }
-        }
-
-        if depth == 0 {
-            return self.quiescence_search(ply, 8, alpha, beta);
-            // return self.nnue.evaluate(self.board.side_to_move());
         }
 
         // reverse futility pruning
@@ -171,7 +207,7 @@ impl Searcher {
             depth -= 1;
         }
 
-        self.order_moves(&mut move_list, &tt_entry, ply);
+        self.order_moves(&mut move_list, &tt_entry);
 
         let mut capture_moves = Vec::with_capacity(20);
         let mut quiet_moves = Vec::with_capacity(20);
@@ -244,19 +280,28 @@ impl Searcher {
                     depth,
                     TTFlag::Lower,
                     false,
+                    ply,
                 );
 
                 self.capture_heuristics
                     .update(&self.board, &cur_move, &capture_moves, depth);
 
-                self.killers.update(*cur_move, depth);
+                if let Some(last_move) = self.board.last_move() {
+                    self.counter_move_heuristics.update_counter_move(
+                        last_move,
+                        *cur_move,
+                        self.board.side_to_move(),
+                    );
+                }
 
-                self.history_heuristics.update(
-                    cur_move,
-                    &quiet_moves,
-                    self.board.side_to_move(),
-                    depth,
-                );
+                // self.killers.update(*cur_move, depth);
+
+                // self.history_heuristics.update(
+                //     cur_move,
+                //     &quiet_moves,
+                //     self.board.side_to_move(),
+                //     depth,
+                // );
 
                 return beta;
             }
@@ -285,6 +330,7 @@ impl Searcher {
             depth,
             node_type,
             pv_node,
+            ply,
         );
 
         if ply == 0 {
@@ -306,7 +352,7 @@ impl Searcher {
         false
     }
 
-    fn quiescence_search(&mut self, ply_searched: u8, depth: u8, mut alpha: i16, beta: i16) -> i16 {
+    fn quiescence_search(&mut self, ply: u8, depth: u8, mut alpha: i16, beta: i16) -> i16 {
         if self.search_limits.is_hard_stop() {
             return 0;
         }
@@ -318,15 +364,15 @@ impl Searcher {
         if let Some(entry) = tt_entry {
             if !pv_node && entry.depth >= depth {
                 match entry.tt_flag {
-                    TTFlag::Exact => return entry.eval,
+                    TTFlag::Exact => return Self::adjust_mate_distance(entry.eval, ply),
                     TTFlag::Upper => {
                         if entry.eval <= alpha {
-                            return entry.eval;
+                            return Self::adjust_mate_distance(entry.eval, ply);
                         }
                     }
                     TTFlag::Lower => {
                         if entry.eval >= beta {
-                            return entry.eval;
+                            return Self::adjust_mate_distance(entry.eval, ply);
                         }
                     }
                 }
@@ -351,8 +397,8 @@ impl Searcher {
 
         let match_result = Arbiter::arbitrate(&self.board, &all_move_list);
         match match_result {
-            MatchResult::Draw => return 0,
-            MatchResult::Loss => return -INFINITY + ply_searched as i16,
+            MatchResult::Draw => return -50,
+            MatchResult::Loss => return -INFINITY + ply as i16,
             MatchResult::NoResult => {}
         }
 
@@ -366,7 +412,7 @@ impl Searcher {
             self.nnue.make_move(cur_move, &mut self.board);
             self.board.make_move(cur_move);
 
-            let eval = -self.quiescence_search(ply_searched + 1, depth - 1, -beta, -alpha);
+            let eval = -self.quiescence_search(ply + 1, depth - 1, -beta, -alpha);
             if self.search_limits.is_hard_stop() {
                 return 0;
             }
@@ -382,6 +428,7 @@ impl Searcher {
                     0,
                     TTFlag::Lower,
                     false,
+                    ply,
                 );
                 return beta;
             }
@@ -393,8 +440,15 @@ impl Searcher {
             }
         }
 
-        self.tt
-            .update(self.board.zobrist(), best_move, alpha, 0, node_type, false);
+        self.tt.update(
+            self.board.zobrist(),
+            best_move,
+            alpha,
+            0,
+            node_type,
+            false,
+            ply,
+        );
 
         alpha
     }
@@ -415,6 +469,12 @@ impl Searcher {
                 MoveGenerator::<GEN_ALL>::generate(&mut board_clone, &mut valid_moves);
 
                 if !valid_moves.contains_move(best_move) {
+                    break;
+                }
+
+                let match_result = Arbiter::arbitrate(&board_clone, &valid_moves);
+
+                if !matches!(match_result, MatchResult::NoResult) || board_clone.is_repetition() {
                     break;
                 }
 
@@ -463,8 +523,14 @@ impl Searcher {
         }
     }
     pub fn iterative_deepening(&mut self) -> MovePly {
-        for cur_depth in (1..32).step_by(1) {
+        for cur_depth in (1..64).step_by(1) {
             self.aspiration_windows(cur_depth);
+
+            if self.tt.curr_depth.load(Ordering::SeqCst) >= cur_depth {
+                continue;
+            }
+
+            self.tt.curr_depth.add(1, Ordering::SeqCst);
 
             // self.search::<IS_ROOT>(0, cur_depth, -INFINITY, INFINITY);
             if self.search_limits.is_hard_stop() {
@@ -491,15 +557,10 @@ impl Searcher {
         self.tt.best_move.load(Ordering::Relaxed).into()
     }
 
-    fn order_moves(
-        &mut self,
-        move_list: &mut MoveList,
-        prev_best_move: &Option<TTEntry>,
-        ply_searched: u8,
-    ) {
+    fn order_moves(&mut self, move_list: &mut MoveList, prev_best_move: &Option<TTEntry>) {
         let mut move_values: [i16; 256] = [0; 256];
 
-        // let mut counter_move = MovePly::default();
+        // let counter_move = MovePly::default();
         // let last_played = self.board.last_move();
 
         // if let Some(last_move) = last_played {
@@ -509,13 +570,12 @@ impl Searcher {
         // }
 
         for (i, cur_move) in move_list.iter().enumerate() {
-            // self.board.make_move(cur_move);
-            // if self.tt.probe(self.board.zobrist()).is_some() {
-            //     move_values[i] = 30000;
-            //     self.board.undo_move();
-            //     continue;
-            // }
-            // self.board.undo_move();
+            if let Some(entry) = self.tt.probe(self.board.zobrist()) {
+                if entry.cur_move == *cur_move {
+                    move_values[i] = 30000;
+                    continue;
+                }
+            }
 
             let flag = cur_move.flag();
 
@@ -545,15 +605,6 @@ impl Searcher {
 
             move_values[i] += 2 * see(cur_move.from(), cur_move.to(), &self.board);
 
-            // let attacker_value = PIECE_VALUES[self.board.piece_at(cur_move.from()) as usize];
-            // let victim_value = PIECE_VALUES[self.board.piece_at(cur_move.to()) as usize];
-            // if self.board.piece_at(cur_move.to()).is_piece() {
-            //     move_values[i] += victim_value - attacker_value;
-            // }
-
-            // 1625, 7701 depth 14
-            //
-
             if flag.is_promotion() {
                 move_values[i] += PIECE_VALUES[flag.promotion_piece(White) as usize] * 10;
             }
@@ -571,39 +622,44 @@ impl Searcher {
         move_list.order_moves(&move_values);
     }
 
-    pub fn search_start(&mut self, _num_threads: usize) {
-        // let mut nnue = NNUE::default();
-        // nnue.new(&mut board);
+    pub fn search_start(
+        tt: &Arc<Transposition>,
+        board: &Board,
+        search_limits: &SearchLimits,
+        num_threads: usize,
+    ) {
+        // let best_move = self.iterative_deepening();
+        // println!("bestmove {}\n", best_move);
 
-        // let mut thread_board = board.clone();
+        let limits_copy = search_limits.clone();
+        let board_copy = board.clone();
 
-        // let tt_new? = Arc::clone(&tt);
+        let mut handles = Vec::new();
+        for i in 0..num_threads {
+            let tt_copy = Arc::clone(tt);
 
-        // let best_move = self.iterative_deepening(&mut thread_board, &tt, &mut nnue, &search_limits);
-        let best_move = self.iterative_deepening();
-        self.tt.age();
+            let handle = thread::Builder::new()
+                .stack_size(32 * 1024 * 1024)
+                .name(format!("Engine Thread {i}"))
+                .spawn(move || {
+                    let thread_board = board_copy.clone();
+                    let thread_limits = limits_copy.clone();
+                    let mut searcher = Searcher::new(&tt_copy, &thread_board, &thread_limits);
+
+                    searcher.iterative_deepening();
+                });
+
+            handles.push(handle.unwrap());
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let best_move: MovePly = tt.best_move.load(Ordering::Relaxed).into();
+
         println!("bestmove {}\n", best_move);
 
-        // tt.age();
-
-        // let limits = search_limits.clone();
-        // let mut handles = Vec::new();
-        // for _ in 0..8 {
-        //     let tt_new = Arc::clone(&tt);
-        //
-        //     let handle = thread::Builder::new().stack_size(32 * 1024 * 1024).name("eiei".to_string()).spawn(move || {
-        //         let mut thread_board = board.clone();
-        //         let mut thread_nnue = nnue.clone();
-        //         iterative_deepening(&mut thread_board, &tt_new, &mut thread_nnue, &limits);
-        //     });
-        //
-        //     handles.push(handle.unwrap());
-        // }
-        //
-        //
-        // for handle in handles {
-        //
-        //     handle.join().unwrap();
-        // }
+        tt.age();
     }
 }
