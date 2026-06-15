@@ -24,6 +24,15 @@ pub enum Commands {
     Perft {
         depth: u32,
     },
+
+    TTPerft {
+        depth: u32,
+    },
+
+    BulkPerft {
+        depth: u32,
+    },
+
     Unknown(String),
     IncorrectFormat,
 }

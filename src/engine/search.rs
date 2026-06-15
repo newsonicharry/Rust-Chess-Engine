@@ -612,11 +612,6 @@ impl Searcher {
             if flag.is_castles() {
                 move_values[i] += 1000;
             }
-            // if move_is_quiet(&self.board, cur_move) {
-            //     move_values[i] += self
-            //         .history_heuristics
-            //         .get(*cur_move, self.board.side_to_move());
-            // }
         }
 
         move_list.order_moves(&move_values);
@@ -628,9 +623,6 @@ impl Searcher {
         search_limits: &SearchLimits,
         num_threads: usize,
     ) {
-        // let best_move = self.iterative_deepening();
-        // println!("bestmove {}\n", best_move);
-
         let limits_copy = search_limits.clone();
         let board_copy = board.clone();
 
@@ -660,6 +652,7 @@ impl Searcher {
 
         println!("bestmove {}\n", best_move);
 
+        tt.curr_depth.store(0, Ordering::Relaxed);
         tt.age();
     }
 }

@@ -3,6 +3,7 @@ mod capture_history;
 mod counter_move_heuristics;
 pub mod eval;
 mod info;
+pub mod perft;
 pub mod search;
 mod search_funcs;
 pub mod search_limits;

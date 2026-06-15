@@ -2,6 +2,7 @@ use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::{BUTTON_OPTION_TABLE, SPIN_OPTION_TABLE};
 use std::str::FromStr;
 pub struct UCIParser {}
+use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT};
 
 const START_POS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -243,7 +244,7 @@ impl UCIParser {
         }
     }
 
-    pub fn parse_perft(split_message: Vec<&str>) -> Commands {
+    pub fn parse_perft<const PERFT_TYPE: u8>(split_message: Vec<&str>) -> Commands {
         if split_message.len() == 1 {
             println!("Command perft depth parameter is not filled.");
             return Commands::IncorrectFormat;
@@ -256,8 +257,14 @@ impl UCIParser {
             return Commands::IncorrectFormat;
         }
 
-        Commands::Perft {
-            depth: u32::from_str(depth).unwrap(),
+        let depth = u32::from_str(depth).unwrap();
+
+        match PERFT_TYPE {
+            BULK_PERFT => Commands::BulkPerft { depth },
+            PERFT => Commands::Perft { depth },
+            TT_PERFT => Commands::TTPerft { depth },
+
+            _ => unreachable!(),
         }
     }
 
@@ -285,7 +292,10 @@ impl UCIParser {
             "setoption" => Self::parse_set_option(split_message),
             "position" => Self::parse_position(split_message),
             "go" => Self::parse_go(split_message),
-            "perft" => Self::parse_perft(split_message),
+
+            "perft" => Self::parse_perft::<PERFT>(split_message),
+            "bperft" => Self::parse_perft::<BULK_PERFT>(split_message),
+            "ttperft" => Self::parse_perft::<TT_PERFT>(split_message),
 
             _ => Commands::Unknown(String::from(initial_command)),
         }
