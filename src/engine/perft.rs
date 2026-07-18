@@ -101,14 +101,17 @@ pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
     let mut all_nodes = 0;
 
     if depth == 1 {
-        all_nodes = search::<PERFT_TYPE>(board, depth, 0, &mut transposition)
+        all_nodes += start_pos_moves.move_count() as u64;
+        for curr_move in start_pos_moves.iter() {
+            println!("{curr_move}: 1");
+        }
     } else {
-        for cur_move in start_pos_moves.iter() {
-            board.make_move(cur_move);
+        for curr_move in start_pos_moves.iter() {
+            board.make_move(curr_move);
             let num_nodes = search::<PERFT_TYPE>(board, depth - 1, 0, &mut transposition);
             all_nodes += num_nodes;
             board.undo_move();
-            println!("{cur_move}: {num_nodes}");
+            println!("{curr_move}: {num_nodes}");
         }
     }
 

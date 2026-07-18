@@ -52,7 +52,9 @@ fn main() {
 
     let mut current_fen: String = START_POS.to_string();
     let mut board = Board::default();
+
     board.new(&current_fen);
+
     let mut tt_size = 64;
     let mut tt = Arc::new(Transposition::new(tt_size));
 
@@ -180,6 +182,126 @@ fn main() {
         }
     }
 }
+
+/* fn test_code() {
+    use cozy_chess;
+
+    fn perft(
+        my_board: &mut Board,
+        cozy_board: cozy_chess::Board,
+        depth: u8,
+        mut num_nodes: u64,
+    ) -> u64 {
+        let mut cozy_move_list = Vec::new();
+        cozy_board.generate_moves(|moves| {
+            cozy_move_list.extend(moves);
+            false
+        });
+
+        let mut move_list = MoveList::default();
+        MoveGenerator::<GEN_ALL>::generate(my_board, &mut move_list);
+
+        if cozy_move_list.len() != move_list.move_count() {
+            println!("{cozy_board}");
+            println!("{my_board}");
+
+            for past_state in my_board.past_board_states().unwrap() {
+                println!("Played: {}", past_state.played);
+            }
+            println!(
+                "mine {} it {}",
+                move_list.move_count(),
+                cozy_move_list.len()
+            );
+            for curr_move in move_list.iter() {
+                // if my_board.piece_at(curr_move.from()).is_pawn() {
+                println!("{curr_move}");
+                // }
+            }
+
+            panic!()
+        }
+
+        if depth == 1 {
+            return move_list.move_count() as u64;
+        }
+
+        for curr_move in move_list.iter() {
+            let mut cozy_board = cozy_board.clone();
+            let mut move_as_str = curr_move.to_string();
+
+            if my_board.piece_at(Square::E1).is_king() {
+                match move_as_str.as_str() {
+                    "e1g1" => move_as_str = "e1h1".to_string(),
+                    "e1c1" => move_as_str = "e1a1".to_string(),
+                    _ => {}
+                }
+            }
+
+            if my_board.piece_at(Square::E8).is_king() {
+                match move_as_str.as_str() {
+                    "e8g8" => move_as_str = "e8h8".to_string(),
+                    "e8c8" => move_as_str = "e8a8".to_string(),
+                    _ => {}
+                }
+            }
+
+            my_board.make_move(curr_move);
+            cozy_board.play_unchecked(move_as_str.parse().unwrap());
+            let search_nodes = perft(my_board, cozy_board.clone(), depth - 1, 0);
+
+            num_nodes += search_nodes;
+            my_board.undo_move();
+        }
+
+        num_nodes
+    }
+
+    let mut my_board = Board::default();
+    my_board.new("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
+
+    let cozy_board =
+        cozy_chess::Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", false).unwrap();
+
+    perft(&mut my_board, cozy_board, 5, 0);
+}
+
+fn cozy_perft_bulk(depth: u8) {
+    use cozy_chess;
+
+    fn perft_bulk(board: &cozy_chess::Board, depth: u8) -> u64 {
+        let mut nodes = 0;
+        match depth {
+            0 => nodes += 1,
+            1 => {
+                board.generate_moves(|moves| {
+                    nodes += moves.len() as u64;
+                    false
+                });
+            }
+            _ => {
+                board.generate_moves(|moves| {
+                    for mv in moves {
+                        let mut board = board.clone();
+                        board.play_unchecked(mv);
+                        let child_nodes = perft_bulk(&board, depth - 1);
+                        nodes += child_nodes;
+                    }
+                    false
+                });
+            }
+        }
+        nodes
+    }
+    let timer = Instant::now();
+    let board = cozy_chess::Board::default();
+
+    let num_nodes = perft_bulk(&board, depth);
+
+    println!("nodes: {num_nodes}");
+    println!("elapsed {}", (timer.elapsed().as_secs_f64()));
+    println!("nps {}", num_nodes as f64 / (timer.elapsed().as_secs_f64()));
+} */
 
 // test code in case i need to check if something is broken
 pub fn run_self_play() {

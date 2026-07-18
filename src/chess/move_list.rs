@@ -32,21 +32,43 @@ impl MoveList {
         }
     }
 
-    pub fn add_promotion_moves(&mut self, mut to_mask: u64, from: Square) {
-        while to_mask != 0 {
-            let to_square = Square::from(bits::next(to_mask));
+    pub fn add_enpassant_moves(&mut self, to: Square, mut from_mask: u64) {
+        while from_mask != 0 {
+            let from = Square::from(bits::next(from_mask));
 
-            self.moves[self.move_count] = MovePly::new(from, to_square, MoveFlag::PromoteToKnight);
-            self.moves[self.move_count + 1] =
-                MovePly::new(from, to_square, MoveFlag::PromoteToBishop);
-            self.moves[self.move_count + 2] =
-                MovePly::new(from, to_square, MoveFlag::PromoteToRook);
-            self.moves[self.move_count + 3] =
-                MovePly::new(from, to_square, MoveFlag::PromoteToQueen);
+            self.moves[self.move_count] = MovePly::new(from, to, MoveFlag::EnPassantCapture);
+            from_mask &= from_mask - 1;
+
+            self.move_count += 1;
+        }
+    }
+    pub fn add_bulk_moves(&mut self, mut to_mask: u64, mut from_mask: u64, move_flag: MoveFlag) {
+        while to_mask != 0 {
+            let to = Square::from(bits::next(to_mask));
+            let from = Square::from(bits::next(from_mask));
+
+            self.moves[self.move_count] = MovePly::new(from, to, move_flag);
+            to_mask &= to_mask - 1;
+            from_mask &= from_mask - 1;
+
+            self.move_count += 1;
+        }
+    }
+
+    pub fn add_bulk_promotion_moves(&mut self, mut to_mask: u64, mut from_mask: u64) {
+        while to_mask != 0 {
+            let to = Square::from(bits::next(to_mask));
+            let from = Square::from(bits::next(from_mask));
+
+            self.moves[self.move_count] = MovePly::new(from, to, MoveFlag::PromoteToKnight);
+            self.moves[self.move_count + 1] = MovePly::new(from, to, MoveFlag::PromoteToBishop);
+            self.moves[self.move_count + 2] = MovePly::new(from, to, MoveFlag::PromoteToRook);
+            self.moves[self.move_count + 3] = MovePly::new(from, to, MoveFlag::PromoteToQueen);
 
             self.move_count += 4;
 
-            to_mask = bits::pop(to_mask);
+            to_mask &= to_mask - 1;
+            from_mask &= from_mask - 1;
         }
     }
 

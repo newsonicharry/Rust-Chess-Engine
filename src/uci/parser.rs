@@ -19,7 +19,7 @@ impl UCIParser {
         split_messages: &Vec<&str>,
         break_point: Option<&str>,
     ) -> Result<String, ()> {
-        let mut final_str = "".to_string();
+        let mut final_str = String::new();
 
         for i in start_index..split_messages.len() {
             let section = (*split_messages.get(i).unwrap()).to_owned() + " ";
@@ -57,6 +57,8 @@ impl UCIParser {
 
         let option_name_wrapped =
             Self::collect_until_end_or_breakpoint(2, &split_message, Some("value"));
+
+        println!("{:?}", option_name_wrapped);
 
         if option_name_wrapped.is_err() {
             println!("Command setoption did not include the value for name");

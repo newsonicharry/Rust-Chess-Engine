@@ -1,3 +1,5 @@
+use std::u64;
+
 use crate::chess::board::Board;
 use crate::chess::consts::NUM_SQUARES;
 use crate::chess::move_list::MoveList;
@@ -16,12 +18,16 @@ pub struct MoveGenerator<const GENERATOR_TYPE: bool> {}
 pub const GEN_ALL: bool = false;
 pub const GEN_TACTICS: bool = true;
 
+const PIN_RAY_MASK_SIZE: usize = NUM_SQUARES + 1;
+
 impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
     pub fn generate(board: &mut Board, move_list: &mut MoveList) {
         board.update_occupancy();
         let (pieces_checking, allowed_squares) = Self::get_check_data(board);
 
-        let mut pin_ray_mask: [u64; NUM_SQUARES] = [u64::MAX; NUM_SQUARES];
+        let mut pin_ray_mask: [u64; PIN_RAY_MASK_SIZE] = [u64::MAX; PIN_RAY_MASK_SIZE];
+        pin_ray_mask[PIN_RAY_MASK_SIZE - 1] = 0;
+
         let pinned_pieces_mask = Self::get_pins(board, &mut pin_ray_mask);
 
         if pieces_checking != 0 {
@@ -30,7 +36,14 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             board.set_in_check(false);
         }
 
-        Self::update_pawn_moves(board, move_list, allowed_squares, &pin_ray_mask);
+        Self::update_pawn_moves(
+            board,
+            move_list,
+            allowed_squares,
+            pinned_pieces_mask,
+            &pin_ray_mask,
+        );
+
         Self::update_knight_moves(board, move_list, allowed_squares, pinned_pieces_mask);
 
         Self::update_king_moves(board, move_list, pieces_checking);
@@ -116,90 +129,230 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         board: &Board,
         move_list: &mut MoveList,
         allowed_squares: u64,
-        pin_ray_mask: &[u64; 64],
+        pinned_piece_mask: u64,
+        pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
     ) {
+        const RIGHT: u64 = 0b1000000010000000100000001000000010000000100000001000000010000000;
+        const LEFT: u64 = 0b0000000100000001000000010000000100000001000000010000000100000001;
+
+        const WHITE_DOUBLE_JUMP: u64 =
+            0b0000000000000000000000000000000000000000000000001111111100000000;
+        const WHITE_CAN_DOUBLE_JUMP: u64 =
+            0b0000000000000000000000000000000000000000111111110000000000000000;
+        const WHITE_PROMOTE: u64 =
+            0b1111111100000000000000000000000000000000000000000000000000000000;
+
+        const BLACK_DOUBLE_JUMP: u64 =
+            0b0000000011111111000000000000000000000000000000000000000000000000;
+        const BLACK_CAN_DOUBLE_JUMP: u64 =
+            0b0000000000000000111111110000000000000000000000000000000000000000;
+
+        const BLACK_PROMOTE: u64 =
+            0b0000000000000000000000000000000000000000000000000000000011111111;
+
+        let pawn_bitboard = board.bitboard(Pawn, board.side_to_move()) & !pinned_piece_mask;
+        let mut pinned_pawn_bitboard =
+            board.bitboard(Pawn, board.side_to_move()) & pinned_piece_mask;
+
+        let middle_pawns = pawn_bitboard & !LEFT & !RIGHT;
+
+        let mut single_push;
+        let mut double_push;
+
+        let mut single_push_promotions;
+        let mut left_attack_promotions;
+        let mut right_attack_promotions;
+
+        let mut left_pawn_attacks;
+        let mut right_pawn_attacks;
+
+        if board.side_to_move().is_white() {
+            right_pawn_attacks = ((pawn_bitboard & LEFT) | middle_pawns) << 9;
+            left_pawn_attacks = ((pawn_bitboard & RIGHT) | middle_pawns) << 7;
+
+            single_push = pawn_bitboard << 8;
+            double_push = (pawn_bitboard & WHITE_DOUBLE_JUMP) << 16;
+
+            while pinned_pawn_bitboard != 0 {
+                let square = bits::next(pinned_pawn_bitboard);
+                let square_mask = 1 << square;
+                let pin_mask = pin_ray_mask[square as usize];
+
+                single_push |= (square_mask << 8) & pin_mask;
+                double_push |= ((square_mask & WHITE_DOUBLE_JUMP) << 16) & pin_mask;
+
+                left_pawn_attacks |= ((square_mask & !LEFT) << 7) & pin_mask;
+                right_pawn_attacks |= ((square_mask & !RIGHT) << 9) & pin_mask;
+
+                pinned_pawn_bitboard &= pinned_pawn_bitboard - 1;
+            }
+
+            double_push &= !((WHITE_CAN_DOUBLE_JUMP & board.occupancy()) << 8);
+
+            single_push_promotions = single_push & WHITE_PROMOTE;
+            left_attack_promotions = left_pawn_attacks & WHITE_PROMOTE;
+            right_attack_promotions = right_pawn_attacks & WHITE_PROMOTE;
+
+            single_push &= !WHITE_PROMOTE;
+            right_pawn_attacks &= !WHITE_PROMOTE;
+            left_pawn_attacks &= !WHITE_PROMOTE;
+        } else {
+            right_pawn_attacks = ((pawn_bitboard & LEFT) | middle_pawns) >> 7;
+            left_pawn_attacks = ((pawn_bitboard & RIGHT) | middle_pawns) >> 9;
+
+            single_push = pawn_bitboard >> 8;
+
+            double_push = (pawn_bitboard & BLACK_DOUBLE_JUMP) >> 16;
+
+            while pinned_pawn_bitboard != 0 {
+                let square = bits::next(pinned_pawn_bitboard);
+                let square_mask = 1 << square;
+                let pin_mask = pin_ray_mask[square as usize];
+
+                single_push |= (square_mask >> 8) & pin_mask;
+                double_push |= ((square_mask & BLACK_DOUBLE_JUMP) >> 16) & pin_mask;
+
+                left_pawn_attacks |= ((square_mask & !LEFT) >> 9) & pin_mask;
+                right_pawn_attacks |= ((square_mask & !RIGHT) >> 7) & pin_mask;
+
+                pinned_pawn_bitboard &= pinned_pawn_bitboard - 1;
+            }
+
+            double_push &= !((BLACK_CAN_DOUBLE_JUMP & board.occupancy()) >> 8);
+
+            single_push_promotions = single_push & BLACK_PROMOTE;
+            left_attack_promotions = left_pawn_attacks & BLACK_PROMOTE;
+            right_attack_promotions = right_pawn_attacks & BLACK_PROMOTE;
+
+            single_push &= !BLACK_PROMOTE;
+            right_pawn_attacks &= !BLACK_PROMOTE;
+            left_pawn_attacks &= !BLACK_PROMOTE;
+        }
+
+        let raw_left_attacks = left_pawn_attacks;
+        let raw_right_attacks = right_pawn_attacks;
+
+        left_pawn_attacks &= board.occupancy_them() & allowed_squares;
+        right_pawn_attacks &= board.occupancy_them() & allowed_squares;
+
+        left_attack_promotions &= board.occupancy_them() & allowed_squares;
+        right_attack_promotions &= board.occupancy_them() & allowed_squares;
+
+        single_push_promotions &= !board.occupancy() & allowed_squares;
+        single_push &= !board.occupancy() & allowed_squares;
+        double_push &= !board.occupancy() & allowed_squares;
+
+        if board.side_to_move().is_white() {
+            move_list.add_bulk_moves(double_push, double_push >> 16, MoveFlag::DoubleJump);
+            move_list.add_bulk_moves(single_push, single_push >> 8, MoveFlag::None);
+
+            move_list.add_bulk_moves(left_pawn_attacks, left_pawn_attacks >> 7, MoveFlag::None);
+            move_list.add_bulk_moves(right_pawn_attacks, right_pawn_attacks >> 9, MoveFlag::None);
+
+            move_list.add_bulk_promotion_moves(single_push_promotions, single_push_promotions >> 8);
+            move_list.add_bulk_promotion_moves(left_attack_promotions, left_attack_promotions >> 7);
+            move_list
+                .add_bulk_promotion_moves(right_attack_promotions, right_attack_promotions >> 9);
+        } else {
+            move_list.add_bulk_moves(double_push, double_push << 16, MoveFlag::DoubleJump);
+            move_list.add_bulk_moves(single_push, single_push << 8, MoveFlag::None);
+
+            move_list.add_bulk_moves(left_pawn_attacks, left_pawn_attacks << 9, MoveFlag::None);
+            move_list.add_bulk_moves(right_pawn_attacks, right_pawn_attacks << 7, MoveFlag::None);
+
+            move_list.add_bulk_promotion_moves(single_push_promotions, single_push_promotions << 8);
+            move_list.add_bulk_promotion_moves(left_attack_promotions, left_attack_promotions << 9);
+            move_list
+                .add_bulk_promotion_moves(right_attack_promotions, right_attack_promotions << 7);
+        }
+
         let king_square = board.king_square(board.side_to_move());
 
-        let mut pawn_bitboard = board.bitboard(Pawn, board.side_to_move());
-        while pawn_bitboard != 0 {
-            let square = Self::pop_lsb(&mut pawn_bitboard).into();
-
-            // for &square in board.piece_list_us(Pawn) {
-            let pin_mask = pin_ray_mask[square as usize];
-            let pawn_attacks = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), square)
-                & board.occupancy_them()
-                & allowed_squares
-                & pin_mask;
-            let pawn_moves = MOVEMENT_MASKS.pawn_move(board.side_to_move(), square)
-                & (!board.occupancy())
-                & allowed_squares
-                & pin_mask;
-            let double_jump = MOVEMENT_MASKS.pawn_jump(board.side_to_move(), square)
-                & (!board.occupancy())
-                & allowed_squares
-                & pin_mask;
-
-            let pawn_mask = square.mask();
-
-            // en passant
-            if let Some(en_passant_file) = board.en_passant_file() {
-                if pin_mask == u64::MAX {
-                    let en_passant_attack_mask = if board.side_to_move().is_white() {
-                        1 << (en_passant_file as u8 + 40)
-                    } else {
-                        1 << (en_passant_file as u8 + 16)
-                    };
-                    let attack_square_mask = MOVEMENT_MASKS
-                        .pawn_attacks(board.side_to_move(), square)
-                        & en_passant_attack_mask;
-
-                    // en passant discovered check
-                    if attack_square_mask != 0 {
-                        let enemy_pawn_mask: u64 = if board.side_to_move().is_white() {
-                            1 << (en_passant_file as u8 + 32)
-                        } else {
-                            1 << (en_passant_file as u8 + 24)
-                        };
-                        let new_blockers = board.occupancy() & (!enemy_pawn_mask) & (!pawn_mask)
-                            | attack_square_mask;
-
-                        let enemy_orthogonal = board.orthogonal_bitboard_them();
-                        let enemy_diagonal = board.diagonal_bitboard_them();
-
-                        if rook_lookup(king_square, new_blockers) & enemy_orthogonal == 0 {
-                            if bishop_lookup(king_square, new_blockers) & enemy_diagonal == 0 {
-                                move_list.add_moves(
-                                    attack_square_mask,
-                                    square,
-                                    MoveFlag::EnPassantCapture,
-                                );
-                            }
-                        }
-                    }
+        let calculate_discovered_enpassant_attack =
+            |pawn_mask: u64, en_passant_attack_mask: u64, enemy_pawn_mask: u64| -> u64 {
+                if pawn_mask == 0 {
+                    return 0;
                 }
-            }
 
-            // promotion
-            if square.rank().can_pawn_promote(board.side_to_move()) {
-                move_list.add_promotion_moves(pawn_moves, square);
-                move_list.add_promotion_moves(pawn_attacks, square);
+                let new_blockers =
+                    board.occupancy() & (!enemy_pawn_mask) & (!pawn_mask) | en_passant_attack_mask;
 
-                continue;
-            }
+                let enemy_orthogonal = board.orthogonal_bitboard_them();
+                let enemy_diagonal = board.diagonal_bitboard_them();
 
-            move_list.add_moves(pawn_attacks, square, MoveFlag::None);
+                let no_orthogonal_attack =
+                    rook_lookup(king_square, new_blockers) & enemy_orthogonal == 0;
+                let no_diagonal_attack =
+                    bishop_lookup(king_square, new_blockers) & enemy_diagonal == 0;
 
-            if GENERATOR_TYPE == GEN_ALL {
-                // normal moves and captures
-                move_list.add_moves(pawn_moves, square, MoveFlag::None);
-
-                // pawn double jump
-                let no_piece_in_way = MOVEMENT_MASKS.pawn_move(board.side_to_move(), square)
-                    & (!board.occupancy())
-                    != 0;
-                if square.rank().is_pawn_start(board.side_to_move()) && no_piece_in_way {
-                    move_list.add_moves(double_jump, square, MoveFlag::DoubleJump);
+                if no_orthogonal_attack && no_diagonal_attack {
+                    return pawn_mask;
                 }
+
+                0
+            };
+
+        if let Some(en_passant_file) = board.en_passant_file() {
+            if board.side_to_move().is_white() {
+                let en_passant_attack_square = en_passant_file as u8 + 40;
+                let en_passant_attack_mask = 1 << en_passant_attack_square;
+
+                let right_pawn_attack = raw_left_attacks & en_passant_attack_mask;
+                let left_pawn_attack = raw_right_attacks & en_passant_attack_mask;
+
+                let mut right_pawn_position = right_pawn_attack >> 7;
+                let mut left_pawn_position = left_pawn_attack >> 9;
+
+                right_pawn_position &= pin_ray_mask[right_pawn_position.trailing_zeros() as usize];
+                left_pawn_position &= pin_ray_mask[left_pawn_position.trailing_zeros() as usize];
+
+                let enemy_pawn_mask = 1 << (en_passant_file as u8 + 32);
+                right_pawn_position = calculate_discovered_enpassant_attack(
+                    right_pawn_position,
+                    en_passant_attack_mask,
+                    enemy_pawn_mask,
+                );
+
+                left_pawn_position = calculate_discovered_enpassant_attack(
+                    left_pawn_position,
+                    en_passant_attack_mask,
+                    enemy_pawn_mask,
+                );
+
+                move_list.add_enpassant_moves(
+                    Square::from(en_passant_attack_square),
+                    right_pawn_position | left_pawn_position,
+                );
+            } else {
+                let en_passant_attack_square = en_passant_file as u8 + 16;
+                let en_passant_attack_mask = 1 << en_passant_attack_square;
+
+                let mut right_pawn_attack = raw_left_attacks & en_passant_attack_mask;
+                let mut left_pawn_attack = raw_right_attacks & en_passant_attack_mask;
+
+                right_pawn_attack &= pin_ray_mask[right_pawn_attack.trailing_zeros() as usize];
+                left_pawn_attack &= pin_ray_mask[left_pawn_attack.trailing_zeros() as usize];
+
+                let mut right_pawn_position = right_pawn_attack << 9;
+                let mut left_pawn_position = left_pawn_attack << 7;
+
+                let enemy_pawn_mask = 1 << (en_passant_file as u8 + 24);
+                right_pawn_position = calculate_discovered_enpassant_attack(
+                    right_pawn_position,
+                    en_passant_attack_mask,
+                    enemy_pawn_mask,
+                );
+
+                left_pawn_position = calculate_discovered_enpassant_attack(
+                    left_pawn_position,
+                    en_passant_attack_mask,
+                    enemy_pawn_mask,
+                );
+
+                move_list.add_enpassant_moves(
+                    Square::from(en_passant_attack_square),
+                    right_pawn_position | left_pawn_position,
+                );
             }
         }
     }
@@ -239,7 +392,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         board: &Board,
         move_list: &mut MoveList,
         mut allowed_squares: u64,
-        pin_ray_mask: &[u64; 64],
+        pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
     ) {
         if GENERATOR_TYPE == GEN_TACTICS {
             let enemy_king = board.king_square(!board.side_to_move());
@@ -320,7 +473,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
-    fn get_pins(board: &Board, pin_ray_mask: &mut [u64; 64]) -> u64 {
+    fn get_pins(board: &Board, pin_ray_mask: &mut [u64; PIN_RAY_MASK_SIZE]) -> u64 {
         let friendly_king_square = board.king_square(board.side_to_move());
         let friendly_pieces = board.occupancy_us();
         let enemy_pieces = board.occupancy_them();

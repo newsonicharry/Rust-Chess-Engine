@@ -5,7 +5,7 @@ use crate::chess::types::piece::Piece::NoPiece;
 
 #[derive(Copy, Clone)]
 #[repr(C)]
-pub struct BoardState{
+pub struct BoardState {
     pub played: MovePly,
     pub captured: Piece,
     pub half_move_clock: u8,
@@ -18,7 +18,7 @@ pub struct BoardState{
 
 impl Default for BoardState {
     fn default() -> BoardState {
-        BoardState{
+        BoardState {
             played: MovePly::default(),
             captured: NoPiece,
             half_move_clock: 0,
