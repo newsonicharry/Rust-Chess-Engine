@@ -67,25 +67,74 @@ fn search<const PERFT_TYPE: u8>(
         return tt_nodes;
     }
 
-    let mut move_list = MoveList::default();
-    MoveGenerator::<GEN_ALL>::generate(board, &mut move_list);
-
+    let board_ptr: *mut Board = board;
     if depth == 1 && (PERFT_TYPE == BULK_PERFT || PERFT_TYPE == TT_PERFT) {
-        return move_list.move_count() as u64;
+        MoveGenerator::<GEN_ALL>::generate(board_ptr, &mut |piece_moves| {
+            num_nodes += piece_moves.move_count();
+        });
+        return num_nodes;
     }
 
-    for cur_move in move_list.iter() {
-        board.make_move(cur_move);
-        let search_nodes = search::<PERFT_TYPE>(board, depth - 1, 0, transposition);
+    // match depth {
+    //     1 => MoveGenerator::<GEN_ALL>::generate(board_ptr, &mut |piece_moves| {
+    //         num_nodes += piece_moves.move_count();
+    //     }),
+    //     _ => unsafe {
+    //         MoveGenerator::<GEN_ALL>::generate(board_ptr, &mut |piece_moves| {
+    //             for cur_move in piece_moves {
+    //                 (*board_ptr).make_move(&cur_move);
+    //                 let search_nodes = search::<PERFT_TYPE>(board, depth - 1, 0, transposition);
 
-        if PERFT_TYPE == TT_PERFT {
-            transposition.update(board.zobrist(), search_nodes, depth - 1);
-        }
+    //                 if PERFT_TYPE == TT_PERFT {
+    //                     transposition.update(board.zobrist(), search_nodes, depth - 1);
+    //                 }
 
-        num_nodes += search_nodes;
+    //                 num_nodes += search_nodes;
 
-        board.undo_move();
-    }
+    //                 (*board_ptr).undo_move();
+    //             }
+    //         });
+    //     },
+    // }
+
+    unsafe {
+        MoveGenerator::<GEN_ALL>::generate(board_ptr, &mut |piece_moves| {
+            for cur_move in piece_moves {
+                (*board_ptr).make_move(&cur_move);
+                let search_nodes = search::<PERFT_TYPE>(board, depth - 1, 0, transposition);
+
+                if PERFT_TYPE == TT_PERFT {
+                    transposition.update(board.zobrist(), search_nodes, depth - 1);
+                }
+
+                num_nodes += search_nodes;
+
+                (*board_ptr).undo_move();
+            }
+        });
+    };
+
+    // let mut move_list = MoveList::default();
+    // MoveGenerator::<GEN_ALL>::generate(board, &mut |mut piece_moves| {
+    //     move_list.add_piece_moves(&mut piece_moves);
+    // });
+
+    // if depth == 1 && (PERFT_TYPE == BULK_PERFT || PERFT_TYPE == TT_PERFT) {
+    //     return move_list.move_count() as u64;
+    // }
+
+    // for cur_move in move_list.iter() {
+    //     board.make_move(cur_move);
+    //     let search_nodes = search::<PERFT_TYPE>(board, depth - 1, 0, transposition);
+
+    //     if PERFT_TYPE == TT_PERFT {
+    //         transposition.update(board.zobrist(), search_nodes, depth - 1);
+    //     }
+
+    //     num_nodes += search_nodes;
+
+    //     board.undo_move();
+    // }
 
     num_nodes
 }
@@ -94,7 +143,9 @@ pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
     let mut transposition = PerftTT::new(128);
 
     let mut start_pos_moves = MoveList::default();
-    MoveGenerator::<GEN_ALL>::generate(board, &mut start_pos_moves);
+    MoveGenerator::<GEN_ALL>::generate(board, &mut |mut piece_moves| {
+        start_pos_moves.add_piece_moves(&mut piece_moves);
+    });
 
     let timer = Instant::now();
 

@@ -300,6 +300,12 @@ impl Board {
     fn add_piece<const ZOBRIST_OPTION: bool>(&mut self, piece: Piece, square: Square) {
         self.bitboards[piece as usize].add_piece(square);
         self.piece_squares[square as usize] = piece;
+        self.occupancy ^= square.mask();
+
+        match piece.color() {
+            Color::White => self.white_occupancy ^= square.mask(),
+            Color::Black => self.black_occupancy ^= square.mask(),
+        }
 
         if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
             self.zobrist ^= ZOBRIST.square_zobrist(piece, square);
@@ -309,6 +315,12 @@ impl Board {
     fn remove_piece<const ZOBRIST_OPTION: bool>(&mut self, piece: Piece, square: Square) {
         self.bitboards[piece as usize].remove_piece(square);
         self.piece_squares[square as usize] = NoPiece;
+        self.occupancy ^= square.mask();
+
+        match piece.color() {
+            Color::White => self.white_occupancy ^= square.mask(),
+            Color::Black => self.black_occupancy ^= square.mask(),
+        }
 
         if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
             self.zobrist ^= ZOBRIST.square_zobrist(piece, square);
@@ -317,7 +329,19 @@ impl Board {
     #[inline(always)]
     fn move_piece<const ZOBRIST_OPTION: bool>(&mut self, piece: Piece, from: Square, to: Square) {
         self.bitboards[piece as usize].move_piece(from, to);
+        self.occupancy ^= from.mask();
+        self.occupancy ^= to.mask();
 
+        match piece.color() {
+            Color::White => {
+                self.white_occupancy ^= from.mask();
+                self.white_occupancy ^= to.mask();
+            }
+            Color::Black => {
+                self.black_occupancy ^= from.mask();
+                self.black_occupancy ^= to.mask();
+            }
+        }
         self.piece_squares[from as usize] = NoPiece;
         self.piece_squares[to as usize] = piece;
 
@@ -506,7 +530,7 @@ impl Board {
 
         self.side_to_move = !self.side_to_move;
         self.zobrist ^= ZOBRIST.side_to_move();
-        self.update_occupancy()
+        // self.update_occupancy()
     }
 
     #[inline(always)]

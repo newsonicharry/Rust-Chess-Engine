@@ -1,5 +1,6 @@
 use crate::chess::consts::NUM_SQUARES;
 use crate::chess::types::square::Square;
+use crate::general::bits;
 use std::fmt::{Display, Formatter};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
@@ -28,6 +29,11 @@ impl Bitboard {
     }
     pub fn remove_piece(&mut self, square: Square) {
         self.0 ^= square.mask();
+    }
+
+    pub fn pop(&mut self) -> Square {
+        self.0 = bits::pop(self.0);
+        Square::from(bits::next(self.0))
     }
 }
 

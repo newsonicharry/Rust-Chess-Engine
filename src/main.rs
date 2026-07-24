@@ -2,9 +2,12 @@ use crate::chess::board::Board;
 use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
+use crate::chess::move_list::PieceMoves;
 use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
+use crate::chess::types::move_flag::MoveFlag;
+use crate::chess::types::square::Square;
 use crate::engine::arbiter::Arbiter;
 use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT, perft};
 use crate::engine::search::Searcher;
@@ -38,10 +41,9 @@ const NAME: &str = "Generic Rust UCI Engine";
 
 fn main() {
     // run_self_play();
-    // return;
-
     // dump_bins();
-    // println!("{}", std::mem::size_of::<TTEntry>());
+    // test_code();
+    // return;
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 && args[1] == "pgo-test" {
         run_self_play();
@@ -199,7 +201,9 @@ fn main() {
         });
 
         let mut move_list = MoveList::default();
-        MoveGenerator::<GEN_ALL>::generate(my_board, &mut move_list);
+        MoveGenerator::<GEN_ALL>::generate(my_board, &mut |mut piece_moves| {
+            move_list.add_piece_moves(&mut piece_moves);
+        });
 
         if cozy_move_list.len() != move_list.move_count() {
             println!("{cozy_board}");
@@ -225,7 +229,6 @@ fn main() {
         if depth == 1 {
             return move_list.move_count() as u64;
         }
-
         for curr_move in move_list.iter() {
             let mut cozy_board = cozy_board.clone();
             let mut move_as_str = curr_move.to_string();
@@ -257,17 +260,19 @@ fn main() {
         num_nodes
     }
 
+    let position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+    // let position = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
     let mut my_board = Board::default();
-    my_board.new("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
+    my_board.new(position);
 
-    let cozy_board =
-        cozy_chess::Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", false).unwrap();
+    let cozy_board = cozy_chess::Board::from_fen(position, false).unwrap();
 
-    perft(&mut my_board, cozy_board, 5, 0);
-}
+    perft(&mut my_board, cozy_board, 6, 0);
+} */
 
-fn cozy_perft_bulk(depth: u8) {
+/* fn cozy_perft_bulk(depth: u8) {
     use cozy_chess;
+    use std::time::Instant;
 
     fn perft_bulk(board: &cozy_chess::Board, depth: u8) -> u64 {
         let mut nodes = 0;
@@ -333,7 +338,9 @@ pub fn run_self_play() {
             // println!("{board}");
 
             let mut valid_moves = MoveList::default();
-            MoveGenerator::<GEN_ALL>::generate(&mut board, &mut valid_moves);
+            MoveGenerator::<GEN_ALL>::generate(&mut board, &mut |mut piece_moves| {
+                valid_moves.add_piece_moves(&mut piece_moves);
+            });
 
             let match_result = Arbiter::arbitrate(&mut board, &mut valid_moves);
 
@@ -342,7 +349,7 @@ pub fn run_self_play() {
                 MatchResult::NoResult => {}
             }
 
-            let mut searcher = Searcher::new(&tt, &board, &SearchLimits::new(100, 100));
+            let mut searcher = Searcher::new(&tt, &board, &SearchLimits::new(1000, 1000));
             let move_played = searcher.iterative_deepening();
 
             uci_moves_played.push(move_played);

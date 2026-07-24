@@ -97,7 +97,9 @@ impl Searcher {
         }
 
         let mut move_list = MoveList::default();
-        MoveGenerator::<GEN_ALL>::generate(&mut self.board, &mut move_list);
+        MoveGenerator::<GEN_ALL>::generate(&mut self.board, &mut |mut piece_moves| {
+            move_list.add_piece_moves(&mut piece_moves);
+        });
 
         let match_result = Arbiter::arbitrate(&mut self.board, &move_list);
         match match_result {
@@ -393,7 +395,9 @@ impl Searcher {
         }
 
         let mut all_move_list = MoveList::default();
-        MoveGenerator::<GEN_ALL>::generate(&mut self.board, &mut all_move_list);
+        MoveGenerator::<GEN_ALL>::generate(&mut self.board, &mut |mut piece_moves| {
+            all_move_list.add_piece_moves(&mut piece_moves);
+        });
 
         let match_result = Arbiter::arbitrate(&self.board, &all_move_list);
         match match_result {
@@ -403,7 +407,9 @@ impl Searcher {
         }
 
         let mut tactial_move_list = MoveList::default();
-        MoveGenerator::<GEN_TACTICS>::generate(&mut self.board, &mut tactial_move_list);
+        MoveGenerator::<GEN_TACTICS>::generate(&mut self.board, &mut |mut piece_moves| {
+            tactial_move_list.add_piece_moves(&mut piece_moves);
+        });
 
         let mut node_type = TTFlag::Upper;
         let mut best_move = tactial_move_list.move_at(0);
@@ -466,7 +472,9 @@ impl Searcher {
                 let best_move = entry.cur_move;
 
                 let mut valid_moves = MoveList::default();
-                MoveGenerator::<GEN_ALL>::generate(&mut board_clone, &mut valid_moves);
+                MoveGenerator::<GEN_ALL>::generate(&mut board_clone, &mut |mut piece_moves| {
+                    valid_moves.add_piece_moves(&mut piece_moves);
+                });
 
                 if !valid_moves.contains_move(best_move) {
                     break;

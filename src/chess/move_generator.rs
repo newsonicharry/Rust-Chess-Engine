@@ -2,7 +2,7 @@ use std::u64;
 
 use crate::chess::board::Board;
 use crate::chess::consts::NUM_SQUARES;
-use crate::chess::move_list::MoveList;
+use crate::chess::move_list::{MoveList, PieceMoves};
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::piece::BasePiece;
@@ -21,7 +21,9 @@ pub const GEN_TACTICS: bool = true;
 const PIN_RAY_MASK_SIZE: usize = NUM_SQUARES + 1;
 
 impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
-    pub fn generate(board: &mut Board, move_list: &mut MoveList) {
+    pub fn generate(board: *mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
+        let board: &mut Board = unsafe { &mut (*board) };
+
         board.update_occupancy();
         let (pieces_checking, allowed_squares) = Self::get_check_data(board);
 
@@ -38,19 +40,19 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
         Self::update_pawn_moves(
             board,
-            move_list,
+            move_iter,
             allowed_squares,
             pinned_pieces_mask,
             &pin_ray_mask,
         );
 
-        Self::update_knight_moves(board, move_list, allowed_squares, pinned_pieces_mask);
+        Self::update_knight_moves(board, move_iter, allowed_squares, pinned_pieces_mask);
 
-        Self::update_king_moves(board, move_list, pieces_checking);
+        Self::update_king_moves(board, move_iter, pieces_checking);
 
-        Self::update_slider_moves(Bishop, board, move_list, allowed_squares, &pin_ray_mask);
-        Self::update_slider_moves(Rook, board, move_list, allowed_squares, &pin_ray_mask);
-        Self::update_slider_moves(Queen, board, move_list, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves(Bishop, board, move_iter, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves(Rook, board, move_iter, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves(Queen, board, move_iter, allowed_squares, &pin_ray_mask);
     }
 
     fn pop_lsb(b: &mut u64) -> u32 {
@@ -125,9 +127,46 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         (all_checks, allowed_squares)
     }
 
+    // fn iter_single()
+
+    fn iter_single(
+        from: Square,
+        to_mask: u64,
+        flag: MoveFlag,
+        move_iter: &mut impl FnMut(PieceMoves),
+    ) {
+        move_iter(PieceMoves::new(from, to_mask, flag))
+    }
+
+    fn iter_bulk_white(
+        to_mask: u64,
+        shift: u8,
+        flag: MoveFlag,
+        move_iter: &mut impl FnMut(PieceMoves),
+    ) {
+        move_iter(PieceMoves::new_bulk(to_mask, to_mask >> shift, flag))
+    }
+
+    fn iter_bulk_black(
+        to_mask: u64,
+        shift: u8,
+        flag: MoveFlag,
+        move_iter: &mut impl FnMut(PieceMoves),
+    ) {
+        move_iter(PieceMoves::new_bulk(to_mask, to_mask << shift, flag))
+    }
+
+    fn iter_promote_white(to_mask: u64, shift: u8, move_iter: &mut impl FnMut(PieceMoves)) {
+        move_iter(PieceMoves::new_promote(to_mask, to_mask >> shift));
+    }
+
+    fn iter_promote_black(to_mask: u64, shift: u8, move_iter: &mut impl FnMut(PieceMoves)) {
+        move_iter(PieceMoves::new_promote(to_mask, to_mask << shift));
+    }
+
     fn update_pawn_moves(
         board: &Board,
-        move_list: &mut MoveList,
+        move_iter: &mut impl FnMut(PieceMoves),
         allowed_squares: u64,
         pinned_piece_mask: u64,
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
@@ -243,27 +282,29 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         double_push &= !board.occupancy() & allowed_squares;
 
         if board.side_to_move().is_white() {
-            move_list.add_bulk_moves(double_push, double_push >> 16, MoveFlag::DoubleJump);
-            move_list.add_bulk_moves(single_push, single_push >> 8, MoveFlag::None);
+            if GENERATOR_TYPE == GEN_ALL {
+                Self::iter_bulk_white(double_push, 16, MoveFlag::DoubleJump, move_iter);
+                Self::iter_bulk_white(single_push, 8, MoveFlag::None, move_iter);
+            }
 
-            move_list.add_bulk_moves(left_pawn_attacks, left_pawn_attacks >> 7, MoveFlag::None);
-            move_list.add_bulk_moves(right_pawn_attacks, right_pawn_attacks >> 9, MoveFlag::None);
+            Self::iter_bulk_white(left_pawn_attacks, 7, MoveFlag::None, move_iter);
+            Self::iter_bulk_white(right_pawn_attacks, 9, MoveFlag::None, move_iter);
 
-            move_list.add_bulk_promotion_moves(single_push_promotions, single_push_promotions >> 8);
-            move_list.add_bulk_promotion_moves(left_attack_promotions, left_attack_promotions >> 7);
-            move_list
-                .add_bulk_promotion_moves(right_attack_promotions, right_attack_promotions >> 9);
+            Self::iter_promote_white(single_push_promotions, 8, move_iter);
+            Self::iter_promote_white(left_attack_promotions, 7, move_iter);
+            Self::iter_promote_white(right_attack_promotions, 9, move_iter);
         } else {
-            move_list.add_bulk_moves(double_push, double_push << 16, MoveFlag::DoubleJump);
-            move_list.add_bulk_moves(single_push, single_push << 8, MoveFlag::None);
+            if GENERATOR_TYPE == GEN_ALL {
+                Self::iter_bulk_black(double_push, 16, MoveFlag::DoubleJump, move_iter);
+                Self::iter_bulk_black(single_push, 8, MoveFlag::None, move_iter);
+            }
 
-            move_list.add_bulk_moves(left_pawn_attacks, left_pawn_attacks << 9, MoveFlag::None);
-            move_list.add_bulk_moves(right_pawn_attacks, right_pawn_attacks << 7, MoveFlag::None);
+            Self::iter_bulk_black(left_pawn_attacks, 9, MoveFlag::None, move_iter);
+            Self::iter_bulk_black(right_pawn_attacks, 7, MoveFlag::None, move_iter);
 
-            move_list.add_bulk_promotion_moves(single_push_promotions, single_push_promotions << 8);
-            move_list.add_bulk_promotion_moves(left_attack_promotions, left_attack_promotions << 9);
-            move_list
-                .add_bulk_promotion_moves(right_attack_promotions, right_attack_promotions << 7);
+            Self::iter_promote_black(single_push_promotions, 8, move_iter);
+            Self::iter_promote_black(left_attack_promotions, 9, move_iter);
+            Self::iter_promote_black(right_attack_promotions, 7, move_iter);
         }
 
         let king_square = board.king_square(board.side_to_move());
@@ -319,10 +360,35 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     enemy_pawn_mask,
                 );
 
-                move_list.add_enpassant_moves(
-                    Square::from(en_passant_attack_square),
-                    right_pawn_position | left_pawn_position,
-                );
+                if right_pawn_position != 0 {
+                    Self::iter_single(
+                        Square::from(bits::next(right_pawn_position)),
+                        en_passant_attack_mask,
+                        MoveFlag::EnPassantCapture,
+                        move_iter,
+                    );
+                }
+
+                if left_pawn_position != 0 {
+                    Self::iter_single(
+                        Square::from(bits::next(left_pawn_position)),
+                        en_passant_attack_mask,
+                        MoveFlag::EnPassantCapture,
+                        move_iter,
+                    );
+                }
+
+                // Self::iter_single(
+                //     Square::from(en_passant_attack_square),
+                //     right_pawn_position | left_pawn_position,
+                //     MoveFlag::EnPassantCapture,
+                //     move_iter,
+                // );
+
+                // move_list.add_enpassant_moves(
+                //     Square::from(en_passant_attack_square),
+                //     right_pawn_position | left_pawn_position,
+                // );
             } else {
                 let en_passant_attack_square = en_passant_file as u8 + 16;
                 let en_passant_attack_mask = 1 << en_passant_attack_square;
@@ -349,17 +415,42 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     enemy_pawn_mask,
                 );
 
-                move_list.add_enpassant_moves(
-                    Square::from(en_passant_attack_square),
-                    right_pawn_position | left_pawn_position,
-                );
+                if right_pawn_position != 0 {
+                    Self::iter_single(
+                        Square::from(bits::next(right_pawn_position)),
+                        en_passant_attack_mask,
+                        MoveFlag::EnPassantCapture,
+                        move_iter,
+                    );
+                }
+
+                if left_pawn_position != 0 {
+                    Self::iter_single(
+                        Square::from(bits::next(left_pawn_position)),
+                        en_passant_attack_mask,
+                        MoveFlag::EnPassantCapture,
+                        move_iter,
+                    );
+                }
+                // Self::iter_single(
+                //     Square::from(en_passant_attack_square),
+                //     right_pawn_position | left_pawn_position,
+                //     MoveFlag::EnPassantCapture,
+                //     move_iter,
+                // );
+
+                // move_list.add_enpassant_moves(
+                //     Square::from(en_passant_attack_square),
+                //     right_pawn_position | left_pawn_position,
+                // );
             }
         }
     }
 
     fn update_knight_moves(
         board: &Board,
-        move_list: &mut MoveList,
+        // move_list: &mut MoveList,
+        move_iter: &mut impl FnMut(PieceMoves),
         mut allowed_squares: u64,
         pinned_pieces_mask: u64,
     ) {
@@ -375,7 +466,6 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         while knight_bitboard != 0 {
             let square: Square = Self::pop_lsb(&mut knight_bitboard).into();
 
-            // for &square in board.piece_list_us(Knight) {
             if pinned_pieces_mask & square.mask() != 0 {
                 continue;
             }
@@ -383,14 +473,15 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             let knight_moves: u64 =
                 (MOVEMENT_MASKS.knight[square as usize]) & !board.occupancy_us() & allowed_squares;
 
-            move_list.add_moves(knight_moves, square, MoveFlag::None);
+            Self::iter_single(square, knight_moves, MoveFlag::None, move_iter);
         }
     }
 
     fn update_slider_moves(
         slider_type: BasePiece,
         board: &Board,
-        move_list: &mut MoveList,
+        move_iter: &mut impl FnMut(PieceMoves),
+        // move_list: &mut MoveList,
         mut allowed_squares: u64,
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
     ) {
@@ -411,11 +502,17 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 & !board.occupancy_us()
                 & allowed_squares
                 & pin_ray_mask[square as usize];
-            move_list.add_moves(slider_moves, square, MoveFlag::None);
+            // move_list.add_moves(slider_moves, square, MoveFlag::None);
+
+            Self::iter_single(square, slider_moves, MoveFlag::None, move_iter);
         }
     }
 
-    fn update_king_moves(board: &Board, move_list: &mut MoveList, pieces_checking: u64) {
+    fn update_king_moves(
+        board: &Board,
+        move_iter: &mut impl FnMut(PieceMoves),
+        pieces_checking: u64,
+    ) {
         let attack_squares = Self::get_enemy_attacks(board);
         let king_square = board.king_square(board.side_to_move());
 
@@ -424,11 +521,13 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
         if GENERATOR_TYPE == GEN_TACTICS {
             valid_moves &= board.occupancy_them();
-            move_list.add_moves(valid_moves, king_square, MoveFlag::None);
+            // move_list.add_moves(valid_moves, king_square, MoveFlag::None);
+            Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
             return;
         }
 
-        move_list.add_moves(valid_moves, king_square, MoveFlag::None);
+        // move_list.add_moves(valid_moves, king_square, MoveFlag::None);
+        Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
 
         if board.has_short_castle_rights(board.side_to_move()) && pieces_checking == 0 {
             let clear_squares = if board.side_to_move().is_white() {
@@ -443,7 +542,14 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 } else {
                     Square::G8
                 };
-                move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleShort);
+                // move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleShort);
+
+                Self::iter_single(
+                    king_square,
+                    move_to_square.mask(),
+                    MoveFlag::CastleShort,
+                    move_iter,
+                );
             }
         }
 
@@ -468,7 +574,13 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     Square::C8
                 };
 
-                move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleLong);
+                Self::iter_single(
+                    king_square,
+                    move_to_square.mask(),
+                    MoveFlag::CastleLong,
+                    move_iter,
+                );
+                // move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleLong);
             }
         }
     }
