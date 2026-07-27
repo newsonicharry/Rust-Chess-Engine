@@ -1,7 +1,10 @@
+use std::sync::LazyLock;
+
 use crate::chess::consts::{NUM_DIAGONAL_ENTRIES, NUM_ORTHOGONAL_ENTRIES};
 use crate::chess::types::piece::BasePiece;
 use crate::chess::types::square::Square;
 use crate::precomputed::generators::inbetween::InBetween;
+use crate::precomputed::generators::king_attack_masks::KingAttackMasks;
 use crate::precomputed::generators::lmr_reduction::LMRReduction;
 use crate::precomputed::generators::movement_mask::MovementMasks;
 use crate::precomputed::generators::slider_lookup::SliderLookup;
@@ -20,36 +23,46 @@ static DIAGONAL_LOOKUP: SliderLookup<NUM_DIAGONAL_ENTRIES> =
 static ORTHOGONAL_LOOKUP: SliderLookup<NUM_ORTHOGONAL_ENTRIES> =
     unsafe { std::mem::transmute(*include_bytes!("bins/orthogonal_lookup.bin")) };
 
+pub static KING_ATTACK_MASKS: LazyLock<KingAttackMasks> = LazyLock::new(|| KingAttackMasks::new());
+
 #[inline(always)]
 pub fn rook_lookup(square: Square, occupied: u64) -> u64 {
-    // let mask = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize];
-    // let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
-    // unsafe { *ORTHOGONAL_LOOKUP.flat_table.get_unchecked(ORTHOGONAL_LOOKUP.offsets[square as usize] + idx) }
+    let mask = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize];
+    let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
+    unsafe {
+        *ORTHOGONAL_LOOKUP
+            .flat_table
+            .get_unchecked(ORTHOGONAL_LOOKUP.offsets[square as usize] + idx)
+    }
 
-    let magic = ORTHOGONAL_LOOKUP.magics[square as usize];
-    let shift = ORTHOGONAL_LOOKUP.shifts[square as usize];
-    let blockers = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
+    // let magic = ORTHOGONAL_LOOKUP.magics[square as usize];
+    // let shift = ORTHOGONAL_LOOKUP.shifts[square as usize];
+    // let blockers = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
 
-    let key = blockers.wrapping_mul(magic) >> shift;
-    let offset = ORTHOGONAL_LOOKUP.offsets[square as usize];
+    // let key = blockers.wrapping_mul(magic) >> shift;
+    // let offset = ORTHOGONAL_LOOKUP.offsets[square as usize];
 
-    ORTHOGONAL_LOOKUP.flat_table[key as usize + offset]
+    // ORTHOGONAL_LOOKUP.flat_table[key as usize + offset]
 }
 
 #[inline(always)]
 pub fn bishop_lookup(square: Square, occupied: u64) -> u64 {
-    // let mask = DIAGONAL_LOOKUP.no_edge_masks[square as usize];
-    // let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
-    // unsafe { *DIAGONAL_LOOKUP.flat_table.get_unchecked(DIAGONAL_LOOKUP.offsets[square as usize] + idx) }
+    let mask = DIAGONAL_LOOKUP.no_edge_masks[square as usize];
+    let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
+    unsafe {
+        *DIAGONAL_LOOKUP
+            .flat_table
+            .get_unchecked(DIAGONAL_LOOKUP.offsets[square as usize] + idx)
+    }
 
-    let magic = DIAGONAL_LOOKUP.magics[square as usize];
-    let shift = DIAGONAL_LOOKUP.shifts[square as usize];
-    let blockers = DIAGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
+    // let magic = DIAGONAL_LOOKUP.magics[square as usize];
+    // let shift = DIAGONAL_LOOKUP.shifts[square as usize];
+    // let blockers = DIAGONAL_LOOKUP.no_edge_masks[square as usize] & occupied;
 
-    let key = blockers.wrapping_mul(magic) >> shift;
-    let offset = DIAGONAL_LOOKUP.offsets[square as usize];
+    // let key = blockers.wrapping_mul(magic) >> shift;
+    // let offset = DIAGONAL_LOOKUP.offsets[square as usize];
 
-    DIAGONAL_LOOKUP.flat_table[key as usize + offset]
+    // DIAGONAL_LOOKUP.flat_table[key as usize + offset]
 }
 
 #[inline(always)]

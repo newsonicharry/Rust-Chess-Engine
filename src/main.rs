@@ -14,6 +14,7 @@ use crate::engine::search::Searcher;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::Transposition;
 use crate::engine::types::match_result::MatchResult;
+use crate::precomputed::data_dump::dump_bins;
 use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
 use crate::uci::parser;
@@ -22,6 +23,7 @@ use std::fs::File;
 use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
+use std::time::Instant;
 
 mod chess;
 mod engine;
@@ -185,7 +187,7 @@ fn main() {
     }
 }
 
-/* fn test_code() {
+fn test_code() {
     use cozy_chess;
 
     fn perft(
@@ -262,13 +264,13 @@ fn main() {
 
     let position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
     // let position = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+    // let position = START_POS;
     let mut my_board = Board::default();
     my_board.new(position);
-
     let cozy_board = cozy_chess::Board::from_fen(position, false).unwrap();
 
-    perft(&mut my_board, cozy_board, 6, 0);
-} */
+    perft(&mut my_board, cozy_board, 5, 0);
+}
 
 /* fn cozy_perft_bulk(depth: u8) {
     use cozy_chess;

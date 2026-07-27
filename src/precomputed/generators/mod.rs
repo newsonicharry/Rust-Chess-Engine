@@ -1,6 +1,7 @@
-pub mod slider_lookup;
-pub mod movement_mask;
-pub mod inbetween;
 pub mod helpers;
-pub mod zobrist;
+pub mod inbetween;
+pub mod king_attack_masks;
 pub mod lmr_reduction;
+pub mod movement_mask;
+pub mod slider_lookup;
+pub mod zobrist;

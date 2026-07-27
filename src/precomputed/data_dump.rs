@@ -1,5 +1,6 @@
 use crate::chess::consts::{NUM_DIAGONAL_ENTRIES, NUM_ORTHOGONAL_ENTRIES};
 use crate::precomputed::generators::inbetween::InBetween;
+use crate::precomputed::generators::king_attack_masks::{self, KingAttackMasks};
 use crate::precomputed::generators::lmr_reduction::LMRReduction;
 use crate::precomputed::generators::movement_mask::MovementMasks;
 use crate::precomputed::generators::slider_lookup::SliderLookup;

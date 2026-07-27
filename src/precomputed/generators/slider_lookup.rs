@@ -5,7 +5,7 @@ use crate::chess::types::file::File;
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use crate::general::bits;
-use crate::precomputed::generators::helpers::{NO_EDGE, create_dynamic_mask};
+use crate::precomputed::generators::helpers::{NO_EDGE, create_dynamic_mask, generate_blockers};
 use rand::Rng;
 use std::collections::HashSet;
 
@@ -52,9 +52,9 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
 
             lookup.no_edge_masks[i] |= create_dynamic_mask::<NO_EDGE>(&piece_direction, square);
 
-            let (magic, shift) = lookup.find_magic_and_shift(square);
-            lookup.magics[i] = magic;
-            lookup.shifts[i] = shift;
+            // let (magic, shift) = lookup.find_magic_and_shift(square);
+            // lookup.magics[i] = magic;
+            // lookup.shifts[i] = shift;
         }
 
         lookup.generate_move_lookup(slider_type);
@@ -67,16 +67,18 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
 
         for (piece_index, piece_move_mask) in self.no_edge_masks.iter().enumerate() {
             let square = Square::from(piece_index as u8);
-            let blockers = self.generate_blockers(square);
+            let blockers = generate_blockers(self.no_edge_masks[square as usize]);
 
             let num_blockers = bits::count(*piece_move_mask);
             let blocker_combinations = 1 << num_blockers;
 
             for blocker in blockers {
-                let magic = self.magics[piece_index];
-                let shift = self.shifts[piece_index];
-                let key = blocker.wrapping_mul(magic) >> shift;
-                // let key = unsafe { std::arch::x86_64::_pext_u64(blocker, self.no_edge_masks[piece_index]) };
+                // let magic = self.magics[piece_index];
+                // let shift = self.shifts[piece_index];
+                // let key = blocker.wrapping_mul(magic) >> shift;
+                let key = unsafe {
+                    std::arch::x86_64::_pext_u64(blocker, self.no_edge_masks[piece_index])
+                };
 
                 let valid_moves = self.get_moves_from_blockers(square, &slider_type, blocker);
 
@@ -138,32 +140,14 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
         new_movement_mask
     }
 
-    pub fn generate_blockers(&self, square: Square) -> Box<[u64]> {
-        let no_edge_mask = self.no_edge_masks[square as usize];
-        let squares = bits::all_squares(no_edge_mask);
-
-        let total_blocker_patters = 1 << squares.len();
-        let mut all_blocker_patters = vec![0u64; total_blocker_patters];
-
-        for pattern_index in 0..total_blocker_patters {
-            for square_index in 0..squares.len() {
-                let bit = (pattern_index >> square_index) & 1;
-
-                let current_move = squares.get(square_index).unwrap();
-
-                all_blocker_patters[pattern_index] |= (bit << *current_move as u64) as u64;
-            }
-        }
-
-        all_blocker_patters.into_boxed_slice()
-    }
-
+    // unused as pext is the default, may be used in the future for platforms that don't support bmi2
+    #[allow(dead_code)]
     fn find_magic_and_shift(&self, square: Square) -> (u64, u8) {
         let no_edge_mask = self.no_edge_masks[square as usize];
 
         let num_blockers = bits::count(no_edge_mask);
 
-        let blockers = self.generate_blockers(square);
+        let blockers = generate_blockers(no_edge_mask);
 
         let final_magic: u64;
 

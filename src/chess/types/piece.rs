@@ -143,6 +143,12 @@ const BASE_PIECES: [BasePiece; 6] = [
     BasePiece::King,
 ];
 
+impl From<u8> for BasePiece {
+    fn from(value: u8) -> Self {
+        unsafe { std::mem::transmute(value) }
+    }
+}
+
 impl From<Piece> for BasePiece {
     fn from(piece: Piece) -> Self {
         let piece_value = piece as u8;

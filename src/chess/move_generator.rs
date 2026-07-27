@@ -10,8 +10,10 @@ use crate::chess::types::piece::BasePiece::{Bishop, Knight, Pawn, Queen, Rook};
 use crate::chess::types::square::Square;
 use crate::general::bits;
 use crate::precomputed::accessor::{
-    IN_BETWEEN, MOVEMENT_MASKS, bishop_lookup, queen_lookup, rook_lookup, slider_lookup,
+    IN_BETWEEN, KING_ATTACK_MASKS, MOVEMENT_MASKS, bishop_lookup, queen_lookup, rook_lookup,
+    slider_lookup,
 };
+use crate::precomputed::generators::king_attack_masks::{KingAttackLookupData, KingAttackMasks};
 
 pub struct MoveGenerator<const GENERATOR_TYPE: bool> {}
 
@@ -19,6 +21,17 @@ pub const GEN_ALL: bool = false;
 pub const GEN_TACTICS: bool = true;
 
 const PIN_RAY_MASK_SIZE: usize = NUM_SQUARES + 1;
+
+// bitboard of squares that cannot be attacked inorder for castling to be possible
+// (since the king cannot castle through check)
+pub const WHITE_SHORT_NOT_ATTACKED_SQUARES: u64 = 96;
+pub const BLACK_SHORT_NOT_ATTACKED_SQUARES: u64 = 6917529027641081856;
+
+pub const WHITE_LONG_NOT_ATTACKED_SQUARES: u64 = 12;
+pub const BLACK_LONG_NOT_ATTACKED_SQUARES: u64 = 864691128455135232;
+
+pub const WHITE_LONG_NOT_OCCUPIED_SQUARES: u64 = 14;
+pub const BLACK_LONG_NOT_OCCUPIED_SQUARES: u64 = 1008806316530991104;
 
 impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
     pub fn generate(board: *mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
@@ -77,23 +90,83 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
-    fn get_enemy_attacks(board: &Board) -> u64 {
-        let mut attack_mask: u64 = 0;
-
-        let all_pieces_no_king =
-            board.occupancy() & !board.king_square(board.side_to_move()).mask();
-
-        for piece in BasePiece::iterator() {
-            let mut bitboard = board.bitboard_them(piece);
-            while bitboard != 0 {
-                let square = Self::pop_lsb(&mut bitboard).into();
-                attack_mask |=
-                    Self::get_attacks(board.side_to_move(), square, piece, all_pieces_no_king);
-            }
+    fn get_enemy_attacks(
+        board: &Board,
+        potential_short_castle: bool,
+        potential_long_castle: bool,
+    ) -> u64 {
+        macro_rules! attack_mask_creation {
+            ($bitboard: ident, $piece: expr, $attack_mask: ident, $board: ident, $all_pieces_no_king: ident) => {{
+                while $bitboard != 0 {
+                    let square = Self::pop_lsb(&mut $bitboard).into();
+                    $attack_mask |= Self::get_attacks(
+                        board.side_to_move(),
+                        square,
+                        $piece,
+                        $all_pieces_no_king,
+                    );
+                }
+            }};
         }
+
+        let mut attack_mask: u64 = 0;
+        let king_square = board.king_square(board.side_to_move());
+        let king_mask_occupancy = MOVEMENT_MASKS.king[king_square as usize] & board.occupancy_us();
+
+        let occupancy = board.occupancy() & !board.king_square(board.side_to_move()).mask();
+
+        let lookup_data = KingAttackLookupData {
+            king_square,
+            king_mask_occupancy,
+            side_to_move: board.side_to_move(),
+            potential_short_castle,
+            potential_long_castle,
+        };
+
+        let mut pawns = board.bitboard(BasePiece::Pawn, !board.side_to_move())
+            & KING_ATTACK_MASKS.pawn_lookup(&lookup_data);
+
+        let mut knights = board.bitboard(BasePiece::Knight, !board.side_to_move())
+            & KING_ATTACK_MASKS.knight_lookup(&lookup_data);
+
+        let mut bishops = board.bitboard(BasePiece::Bishop, !board.side_to_move())
+            & KING_ATTACK_MASKS.bishop_lookup(&lookup_data);
+
+        let mut rooks = board.bitboard(BasePiece::Rook, !board.side_to_move())
+            & KING_ATTACK_MASKS.rook_lookup(&lookup_data);
+
+        let mut queens = board.bitboard(BasePiece::Queen, !board.side_to_move())
+            & KING_ATTACK_MASKS.queen_lookup(&lookup_data);
+
+        let mut kings = board.bitboard(BasePiece::King, !board.side_to_move())
+            & KING_ATTACK_MASKS.king_lookup(&lookup_data);
+
+        attack_mask_creation!(pawns, BasePiece::Pawn, attack_mask, board, occupancy);
+        attack_mask_creation!(knights, BasePiece::Knight, attack_mask, board, occupancy);
+        attack_mask_creation!(bishops, BasePiece::Bishop, attack_mask, board, occupancy);
+        attack_mask_creation!(rooks, BasePiece::Rook, attack_mask, board, occupancy);
+        attack_mask_creation!(queens, BasePiece::Queen, attack_mask, board, occupancy);
+        attack_mask_creation!(kings, BasePiece::King, attack_mask, board, occupancy);
 
         attack_mask
     }
+    // fn get_enemy_attacks(board: &Board) -> u64 {
+    //     let mut attack_mask: u64 = 0;
+
+    //     let all_pieces_no_king =
+    //         board.occupancy() & !board.king_square(board.side_to_move()).mask();
+
+    //     let mut bitboard = board.occupancy_them();
+
+    //     while bitboard != 0 {
+    //         let square = Self::pop_lsb(&mut bitboard).into();
+    //         let piece = board.piece_at(square).into();
+    //         attack_mask |=
+    //             Self::get_attacks(board.side_to_move(), square, piece, all_pieces_no_king);
+    //     }
+
+    //     attack_mask
+    // }
 
     fn get_check_data(board: &Board) -> (u64, u64) {
         let king_square = board.king_square(board.side_to_move());
@@ -377,18 +450,6 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                         move_iter,
                     );
                 }
-
-                // Self::iter_single(
-                //     Square::from(en_passant_attack_square),
-                //     right_pawn_position | left_pawn_position,
-                //     MoveFlag::EnPassantCapture,
-                //     move_iter,
-                // );
-
-                // move_list.add_enpassant_moves(
-                //     Square::from(en_passant_attack_square),
-                //     right_pawn_position | left_pawn_position,
-                // );
             } else {
                 let en_passant_attack_square = en_passant_file as u8 + 16;
                 let en_passant_attack_mask = 1 << en_passant_attack_square;
@@ -432,17 +493,6 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                         move_iter,
                     );
                 }
-                // Self::iter_single(
-                //     Square::from(en_passant_attack_square),
-                //     right_pawn_position | left_pawn_position,
-                //     MoveFlag::EnPassantCapture,
-                //     move_iter,
-                // );
-
-                // move_list.add_enpassant_moves(
-                //     Square::from(en_passant_attack_square),
-                //     right_pawn_position | left_pawn_position,
-                // );
             }
         }
     }
@@ -497,12 +547,10 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         while slider_bitboard != 0 {
             let square: Square = Self::pop_lsb(&mut slider_bitboard).into();
 
-            // for &square in board.piece_list_us(slider_type) {
             let slider_moves: u64 = slider_lookup(slider_type, square, board.occupancy())
                 & !board.occupancy_us()
                 & allowed_squares
                 & pin_ray_mask[square as usize];
-            // move_list.add_moves(slider_moves, square, MoveFlag::None);
 
             Self::iter_single(square, slider_moves, MoveFlag::None, move_iter);
         }
@@ -513,7 +561,28 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         move_iter: &mut impl FnMut(PieceMoves),
         pieces_checking: u64,
     ) {
-        let attack_squares = Self::get_enemy_attacks(board);
+        let side_to_move = board.side_to_move();
+
+        let short_castle_not_occupied = match side_to_move {
+            Color::White => WHITE_SHORT_NOT_ATTACKED_SQUARES,
+            Color::Black => BLACK_SHORT_NOT_ATTACKED_SQUARES,
+        };
+
+        let long_castle_not_occupied = match side_to_move {
+            Color::White => WHITE_LONG_NOT_OCCUPIED_SQUARES,
+            Color::Black => BLACK_LONG_NOT_OCCUPIED_SQUARES,
+        };
+
+        let potental_short_castle = board.has_short_castle_rights(side_to_move)
+            && pieces_checking == 0
+            && short_castle_not_occupied & board.occupancy() == 0;
+
+        let potental_long_castle = board.has_long_castle_rights(side_to_move)
+            && pieces_checking == 0
+            && long_castle_not_occupied & board.occupancy() == 0;
+
+        let attack_squares =
+            Self::get_enemy_attacks(board, potental_short_castle, potental_long_castle);
         let king_square = board.king_square(board.side_to_move());
 
         let mut valid_moves: u64 =
@@ -521,67 +590,42 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
         if GENERATOR_TYPE == GEN_TACTICS {
             valid_moves &= board.occupancy_them();
-            // move_list.add_moves(valid_moves, king_square, MoveFlag::None);
             Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
             return;
         }
 
-        // move_list.add_moves(valid_moves, king_square, MoveFlag::None);
         Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
 
-        if board.has_short_castle_rights(board.side_to_move()) && pieces_checking == 0 {
-            let clear_squares = if board.side_to_move().is_white() {
-                96
-            } else {
-                6917529027641081856
+        if potental_short_castle && (short_castle_not_occupied & attack_squares == 0) {
+            let move_to_square = match side_to_move {
+                Color::White => Square::G1,
+                Color::Black => Square::G8,
             };
 
-            if (clear_squares & attack_squares == 0) && (clear_squares & board.occupancy() == 0) {
-                let move_to_square = if board.side_to_move().is_white() {
-                    Square::G1
-                } else {
-                    Square::G8
-                };
-                // move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleShort);
-
-                Self::iter_single(
-                    king_square,
-                    move_to_square.mask(),
-                    MoveFlag::CastleShort,
-                    move_iter,
-                );
-            }
+            Self::iter_single(
+                king_square,
+                move_to_square.mask(),
+                MoveFlag::CastleShort,
+                move_iter,
+            );
         }
 
-        if board.has_long_castle_rights(board.side_to_move()) && pieces_checking == 0 {
-            let not_attacked_squares: u64 = if board.side_to_move().is_white() {
-                12
-            } else {
-                864691128455135232
-            };
-            let not_occupied_squares: u64 = if board.side_to_move().is_white() {
-                14
-            } else {
-                1008806316530991104
+        let not_attacked_squares = match side_to_move {
+            Color::White => WHITE_LONG_NOT_ATTACKED_SQUARES,
+            Color::Black => BLACK_LONG_NOT_ATTACKED_SQUARES,
+        };
+        if potental_long_castle && not_attacked_squares & attack_squares == 0 {
+            let move_to_square = match side_to_move {
+                Color::White => Square::C1,
+                Color::Black => Square::C8,
             };
 
-            if (not_attacked_squares & attack_squares == 0)
-                && (not_occupied_squares & board.occupancy() == 0)
-            {
-                let move_to_square = if board.side_to_move().is_white() {
-                    Square::C1
-                } else {
-                    Square::C8
-                };
-
-                Self::iter_single(
-                    king_square,
-                    move_to_square.mask(),
-                    MoveFlag::CastleLong,
-                    move_iter,
-                );
-                // move_list.add_moves(move_to_square.mask(), king_square, MoveFlag::CastleLong);
-            }
+            Self::iter_single(
+                king_square,
+                move_to_square.mask(),
+                MoveFlag::CastleLong,
+                move_iter,
+            );
         }
     }
 
