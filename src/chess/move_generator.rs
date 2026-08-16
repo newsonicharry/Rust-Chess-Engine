@@ -1,8 +1,6 @@
-use std::u64;
-
 use crate::chess::board::Board;
 use crate::chess::consts::NUM_SQUARES;
-use crate::chess::move_list::{MoveList, PieceMoves};
+use crate::chess::move_list::PieceMoves;
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::piece::BasePiece;
@@ -13,7 +11,7 @@ use crate::precomputed::accessor::{
     IN_BETWEEN, KING_ATTACK_MASKS, MOVEMENT_MASKS, bishop_lookup, queen_lookup, rook_lookup,
     slider_lookup,
 };
-use crate::precomputed::generators::king_attack_masks::{KingAttackLookupData, KingAttackMasks};
+use crate::precomputed::generators::king_attack_masks::KingAttackLookupData;
 
 pub struct MoveGenerator<const GENERATOR_TYPE: bool> {}
 
@@ -25,19 +23,18 @@ const PIN_RAY_MASK_SIZE: usize = NUM_SQUARES + 1;
 // bitboard of squares that cannot be attacked inorder for castling to be possible
 // (since the king cannot castle through check)
 pub const WHITE_SHORT_NOT_ATTACKED_SQUARES: u64 = 96;
-pub const BLACK_SHORT_NOT_ATTACKED_SQUARES: u64 = 6917529027641081856;
+pub const BLACK_SHORT_NOT_ATTACKED_SQUARES: u64 = 0x6000000000000000;
 
 pub const WHITE_LONG_NOT_ATTACKED_SQUARES: u64 = 12;
-pub const BLACK_LONG_NOT_ATTACKED_SQUARES: u64 = 864691128455135232;
+pub const BLACK_LONG_NOT_ATTACKED_SQUARES: u64 = 0xC00000000000000;
 
 pub const WHITE_LONG_NOT_OCCUPIED_SQUARES: u64 = 14;
-pub const BLACK_LONG_NOT_OCCUPIED_SQUARES: u64 = 1008806316530991104;
+pub const BLACK_LONG_NOT_OCCUPIED_SQUARES: u64 = 0xE00000000000000;
 
 impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
     pub fn generate(board: *mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
         let board: &mut Board = unsafe { &mut (*board) };
 
-        board.update_occupancy();
         let (pieces_checking, allowed_squares) = Self::get_check_data(board);
 
         let mut pin_ray_mask: [u64; PIN_RAY_MASK_SIZE] = [u64::MAX; PIN_RAY_MASK_SIZE];
@@ -150,23 +147,6 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
         attack_mask
     }
-    // fn get_enemy_attacks(board: &Board) -> u64 {
-    //     let mut attack_mask: u64 = 0;
-
-    //     let all_pieces_no_king =
-    //         board.occupancy() & !board.king_square(board.side_to_move()).mask();
-
-    //     let mut bitboard = board.occupancy_them();
-
-    //     while bitboard != 0 {
-    //         let square = Self::pop_lsb(&mut bitboard).into();
-    //         let piece = board.piece_at(square).into();
-    //         attack_mask |=
-    //             Self::get_attacks(board.side_to_move(), square, piece, all_pieces_no_king);
-    //     }
-
-    //     attack_mask
-    // }
 
     fn get_check_data(board: &Board) -> (u64, u64) {
         let king_square = board.king_square(board.side_to_move());
@@ -244,23 +224,17 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         pinned_piece_mask: u64,
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
     ) {
-        const RIGHT: u64 = 0b1000000010000000100000001000000010000000100000001000000010000000;
-        const LEFT: u64 = 0b0000000100000001000000010000000100000001000000010000000100000001;
+        const RIGHT: u64 = 0x8080808080808080;
+        const LEFT: u64 = 0x101010101010101;
 
-        const WHITE_DOUBLE_JUMP: u64 =
-            0b0000000000000000000000000000000000000000000000001111111100000000;
-        const WHITE_CAN_DOUBLE_JUMP: u64 =
-            0b0000000000000000000000000000000000000000111111110000000000000000;
-        const WHITE_PROMOTE: u64 =
-            0b1111111100000000000000000000000000000000000000000000000000000000;
+        const WHITE_DOUBLE_JUMP: u64 = 0xFF00;
+        const WHITE_CAN_DOUBLE_JUMP: u64 = 0xFF0000;
+        const WHITE_PROMOTE: u64 = 0xFF00000000000000;
 
-        const BLACK_DOUBLE_JUMP: u64 =
-            0b0000000011111111000000000000000000000000000000000000000000000000;
-        const BLACK_CAN_DOUBLE_JUMP: u64 =
-            0b0000000000000000111111110000000000000000000000000000000000000000;
+        const BLACK_DOUBLE_JUMP: u64 = 0xFF000000000000;
+        const BLACK_CAN_DOUBLE_JUMP: u64 = 0xFF0000000000;
 
-        const BLACK_PROMOTE: u64 =
-            0b0000000000000000000000000000000000000000000000000000000011111111;
+        const BLACK_PROMOTE: u64 = 0xFF;
 
         let pawn_bitboard = board.bitboard(Pawn, board.side_to_move()) & !pinned_piece_mask;
         let mut pinned_pawn_bitboard =

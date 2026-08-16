@@ -2,19 +2,15 @@ use crate::chess::board::Board;
 use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_list::MoveList;
-use crate::chess::move_list::PieceMoves;
 use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
-use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::square::Square;
 use crate::engine::arbiter::Arbiter;
 use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT, perft};
 use crate::engine::search::Searcher;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::Transposition;
 use crate::engine::types::match_result::MatchResult;
-use crate::precomputed::data_dump::dump_bins;
 use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
 use crate::uci::parser;
@@ -23,7 +19,6 @@ use std::fs::File;
 use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
-use std::time::Instant;
 
 mod chess;
 mod engine;
@@ -47,8 +42,14 @@ fn main() {
     // test_code();
     // return;
     let args: Vec<String> = env::args().collect();
-    if args.len() > 1 && args[1] == "pgo-test" {
-        run_self_play();
+    if args.len() > 1 {
+        if args[1] == "pgo-test" {
+            run_self_play();
+        }
+
+        if args[1] == "pgo-perft" {
+            run_perft_pgo();
+        }
         return;
     }
 
@@ -105,7 +106,7 @@ fn main() {
                 board.new(&current_fen);
                 if let Some(str_moves) = moves {
                     for str_move in str_moves {
-                        board.make_move(&move_ply::uci_move_parser(&str_move, &board))
+                        board.make_move::<true>(&move_ply::uci_move_parser(&str_move, &board))
                     }
                 }
             }
@@ -187,7 +188,7 @@ fn main() {
     }
 }
 
-fn test_code() {
+/* fn test_code() {
     use cozy_chess;
 
     fn perft(
@@ -270,7 +271,7 @@ fn test_code() {
     let cozy_board = cozy_chess::Board::from_fen(position, false).unwrap();
 
     perft(&mut my_board, cozy_board, 5, 0);
-}
+} */
 
 /* fn cozy_perft_bulk(depth: u8) {
     use cozy_chess;
@@ -311,7 +312,37 @@ fn test_code() {
 } */
 
 // test code in case i need to check if something is broken
+pub fn run_perft_pgo() {
+    let mut board = Board::default();
+    const PERFT_TYPE: u8 = BULK_PERFT;
+
+    board.new("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    perft::<PERFT_TYPE>(&mut board, 7);
+
+    board = Board::default();
+    board.new("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+    perft::<PERFT_TYPE>(&mut board, 6);
+
+    board = Board::default();
+    board.new("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
+    perft::<PERFT_TYPE>(&mut board, 8);
+
+    board = Board::default();
+    board.new("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
+    perft::<PERFT_TYPE>(&mut board, 6);
+
+    board = Board::default();
+    board.new("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+    perft::<PERFT_TYPE>(&mut board, 6);
+
+    board = Board::default();
+    board.new("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
+    perft::<PERFT_TYPE>(&mut board, 6);
+}
+
 pub fn run_self_play() {
+    use std::sync::atomic::Ordering;
+
     let mut fen_file = File::open(
         "/home/harry-phillips/Desktop/antidraw_v2.1/AntiDraw_V2.1/UHO_2022/UHO_2022_+110_+119/UHO_2022_8mvs_+110_+119.epd",
     )
@@ -334,7 +365,7 @@ pub fn run_self_play() {
             board.new(fen);
 
             for uci_move in &uci_moves_played {
-                board.make_move(uci_move);
+                board.make_move::<true>(uci_move);
             }
 
             // println!("{board}");
@@ -352,11 +383,13 @@ pub fn run_self_play() {
             }
 
             let mut searcher = Searcher::new(&tt, &board, &SearchLimits::new(1000, 1000));
+
             let move_played = searcher.iterative_deepening();
 
             uci_moves_played.push(move_played);
             println!("{move_played}");
 
+            tt.curr_depth.store(0, Ordering::Relaxed);
             tt.age();
         }
     }

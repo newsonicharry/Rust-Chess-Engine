@@ -1,9 +1,9 @@
-use std::fmt::{Display, Formatter};
 use crate::chess::types::color::Color;
+use std::fmt::{Display, Formatter};
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
-pub enum Rank{
+pub enum Rank {
     First,
     Second,
     Third,
@@ -14,15 +14,15 @@ pub enum Rank{
     Eighth,
 }
 
-impl From<u8> for Rank{
-    fn from(rank: u8) -> Self{
+impl From<u8> for Rank {
+    fn from(rank: u8) -> Self {
         unsafe { std::mem::transmute(rank) }
     }
 }
 
-impl From<String> for Rank{
+impl From<String> for Rank {
     fn from(rank: String) -> Self {
-        match rank.as_str() { 
+        match rank.as_str() {
             "1" => Rank::First,
             "2" => Rank::Second,
             "3" => Rank::Third,
@@ -31,75 +31,69 @@ impl From<String> for Rank{
             "6" => Rank::Sixth,
             "7" => Rank::Seventh,
             "8" => Rank::Eighth,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
 
-
 impl Rank {
-    pub fn add(&mut self, amount: u8){
+    pub fn add(&mut self, amount: u8) {
         *self = Rank::from(*self as u8 + amount);
     }
 
-    pub fn sub(&mut self, amount: u8){
+    pub fn sub(&mut self, amount: u8) {
         *self = Rank::from(*self as u8 - amount);
     }
-    pub fn plus(&mut self){
+    pub fn plus(&mut self) {
         self.add(1);
     }
 
-    pub fn minus(&mut self){
+    pub fn minus(&mut self) {
         self.sub(1);
     }
 
-    pub fn is_pawn_start(&self, color: Color) -> bool{
+    pub fn is_pawn_start(&self, color: Color) -> bool {
         match color {
-            Color::White => { *self as u8 == 1 }
-            Color::Black => { *self as u8 == 6 }
-        }
-    }
-    
-    pub fn is_pawn_jump_end(&self, color: Color) -> bool{
-        match color {
-            Color::White => { *self as u8 == 3 }
-            Color::Black => { *self as u8 == 4 }
+            Color::White => *self as u8 == 1,
+            Color::Black => *self as u8 == 6,
         }
     }
 
-    pub fn is_pawn_promotion(&self, color: Color) -> bool{
-
+    pub fn is_pawn_jump_end(&self, color: Color) -> bool {
         match color {
-            Color::White => { *self as u8 == 7 }
-            Color::Black => { *self as u8 == 0 }
+            Color::White => *self as u8 == 3,
+            Color::Black => *self as u8 == 4,
         }
-
     }
 
-    pub fn can_pawn_promote(&self, color: Color) -> bool{
+    pub fn is_pawn_promotion(&self, color: Color) -> bool {
         match color {
-            Color::White => { *self as u8 == 6 }
-            Color::Black => { *self as u8 == 1 }
+            Color::White => *self as u8 == 7,
+            Color::Black => *self as u8 == 0,
+        }
+    }
+
+    pub fn can_pawn_promote(&self, color: Color) -> bool {
+        match color {
+            Color::White => *self as u8 == 6,
+            Color::Black => *self as u8 == 1,
         }
     }
 }
 
-
 impl Display for Rank {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-
         let file_as_char = match self {
-            Rank::First =>  '1',
+            Rank::First => '1',
             Rank::Second => '2',
-            Rank::Third =>  '3',
+            Rank::Third => '3',
             Rank::Fourth => '4',
-            Rank::Fifth =>  '5',
-            Rank::Sixth =>  '6',
-            Rank::Seventh =>'7',
+            Rank::Fifth => '5',
+            Rank::Sixth => '6',
+            Rank::Seventh => '7',
             Rank::Eighth => '8',
         };
 
-        write!(f,"{}", file_as_char)
-
+        write!(f, "{}", file_as_char)
     }
 }

@@ -1,3 +1,3 @@
-pub mod nnue;
-mod network;
 mod accumulator;
+mod network;
+pub mod nnue;

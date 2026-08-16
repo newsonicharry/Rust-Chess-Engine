@@ -11,8 +11,6 @@ pub const QAB: i32 = 255 * 64;
 
 pub const EVAL_SCALE: i32 = 400;
 
-
-
 #[repr(C)]
 pub struct Network {
     pub feature_weights: [i16; NUM_FEATURES * HIDDEN_SIZE],

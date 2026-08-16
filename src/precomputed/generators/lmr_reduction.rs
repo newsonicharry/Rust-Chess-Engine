@@ -1,12 +1,10 @@
 use crate::chess::consts::{MAX_DEPTH, MAX_POSITIONAL_MOVES};
 
-pub struct LMRReduction{
-    reduction_table: [[u8; MAX_POSITIONAL_MOVES]; MAX_DEPTH]
+pub struct LMRReduction {
+    reduction_table: [[u8; MAX_POSITIONAL_MOVES]; MAX_DEPTH],
 }
 
-
 impl LMRReduction {
-
     pub fn new() -> LMRReduction {
         let mut reduction_table = [[0; MAX_POSITIONAL_MOVES]; MAX_DEPTH];
 
@@ -19,10 +17,9 @@ impl LMRReduction {
             }
         }
 
-
-        LMRReduction{ reduction_table }
+        LMRReduction { reduction_table }
     }
-    pub fn reduction(&self, depth: u8, move_order: u8) -> u8{
+    pub fn reduction(&self, depth: u8, move_order: u8) -> u8 {
         self.reduction_table[depth as usize][move_order as usize]
     }
 }

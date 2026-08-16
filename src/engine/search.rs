@@ -236,7 +236,7 @@ impl Searcher {
             // }
 
             self.nnue.make_move(cur_move, &self.board);
-            self.board.make_move(cur_move);
+            self.board.make_move::<true>(cur_move);
 
             self.search_stack[ply as usize] = *cur_move;
 
@@ -416,7 +416,7 @@ impl Searcher {
 
         for cur_move in tactial_move_list.iter() {
             self.nnue.make_move(cur_move, &mut self.board);
-            self.board.make_move(cur_move);
+            self.board.make_move::<true>(cur_move);
 
             let eval = -self.quiescence_search(ply + 1, depth - 1, -beta, -alpha);
             if self.search_limits.is_hard_stop() {
@@ -487,7 +487,7 @@ impl Searcher {
                 }
 
                 pv_line += &format!("{best_move} ");
-                board_clone.make_move(&best_move);
+                board_clone.make_move::<true>(&best_move);
             } else {
                 break;
             }

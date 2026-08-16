@@ -1,6 +1,6 @@
-use std::mem;
 use crate::chess::types::color::Color;
 use crate::chess::types::piece::Piece;
+use std::mem;
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -16,21 +16,20 @@ pub enum MoveFlag {
     CastleShort,
 }
 
-impl From<u8> for MoveFlag{
-    fn from(val: u8) -> MoveFlag{
+impl From<u8> for MoveFlag {
+    fn from(val: u8) -> MoveFlag {
         unsafe { mem::transmute(val) }
     }
 }
 
-impl PartialEq for MoveFlag{
-    fn eq(&self, other: &MoveFlag) -> bool{
+impl PartialEq for MoveFlag {
+    fn eq(&self, other: &MoveFlag) -> bool {
         *other as u8 == *self as u8
     }
 }
 
-
 impl MoveFlag {
-    pub fn promotion_piece(&self, color: Color) -> Piece{
+    pub fn promotion_piece(&self, color: Color) -> Piece {
         // the binary representation of white pieces and move flag promotion pieces are the same
         // so to convert to black pieces one can simply add 6
         // if IS_BASE_PIECE {
@@ -38,13 +37,12 @@ impl MoveFlag {
         // }
 
         match color {
-            Color::White => unsafe{ mem::transmute(*self as u8) },
-            Color::Black => unsafe{ mem::transmute(*self as u8 +6) },
+            Color::White => unsafe { mem::transmute(*self as u8) },
+            Color::Black => unsafe { mem::transmute(*self as u8 + 6) },
         }
-
     }
 
-    pub fn is_promotion(&self) -> bool{
+    pub fn is_promotion(&self) -> bool {
         match self {
             MoveFlag::PromoteToKnight => true,
             MoveFlag::PromoteToBishop => true,
@@ -54,14 +52,14 @@ impl MoveFlag {
         }
     }
 
-    pub fn is_en_passant_capture(&self) -> bool{
+    pub fn is_en_passant_capture(&self) -> bool {
         match self {
             MoveFlag::EnPassantCapture => true,
             _ => false,
         }
     }
 
-    pub fn is_castles(&self) -> bool{
+    pub fn is_castles(&self) -> bool {
         match self {
             MoveFlag::CastleLong => true,
             MoveFlag::CastleShort => true,
