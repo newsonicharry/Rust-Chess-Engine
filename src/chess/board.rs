@@ -1,6 +1,7 @@
 use crate::chess::bitboard::Bitboard;
 use crate::chess::board_state::BoardState;
 use crate::chess::consts::{MAX_MOVES, NUM_PIECES, NUM_SQUARES};
+use crate::chess::move_generator::{BLACK, WHITE};
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::chess::types::file::File;
@@ -9,7 +10,9 @@ use crate::chess::types::piece::Piece::{
     BlackBishop, BlackKing, BlackPawn, BlackQueen, BlackRook, NoPiece, WhiteBishop, WhiteKing,
     WhitePawn, WhiteQueen, WhiteRook,
 };
-use crate::chess::types::piece::{BasePiece, ITER_BLACK, ITER_WHITE, Piece, char_to_piece};
+use crate::chess::types::piece::{
+    BasePiece, ITER_BLACK, ITER_WHITE, Piece, basepiece_to_piece, char_to_piece,
+};
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use crate::precomputed::accessor::ZOBRIST;
@@ -157,26 +160,23 @@ impl Board {
         Some(last_move)
     }
 
-    pub fn orthogonal_bitboard_them(&self) -> u64 {
-        match self.side_to_move {
-            Color::Black => {
-                self.bitboards[WhiteRook as usize].0 | self.bitboards[WhiteQueen as usize].0
-            }
-            Color::White => {
-                self.bitboards[BlackRook as usize].0 | self.bitboards[BlackQueen as usize].0
-            }
+    pub fn orthogonal_bitboard_them<const COLOR: bool>(&self) -> u64 {
+        match COLOR {
+            WHITE => self.bitboards[BlackRook as usize].0 | self.bitboards[BlackQueen as usize].0,
+            BLACK => self.bitboards[WhiteRook as usize].0 | self.bitboards[WhiteQueen as usize].0,
         }
     }
 
-    pub fn diagonal_bitboard_them(&self) -> u64 {
-        match self.side_to_move {
-            Color::White => {
-                self.bitboards[BlackBishop as usize].0 | self.bitboards[BlackQueen as usize].0
-            }
-            Color::Black => {
-                self.bitboards[WhiteBishop as usize].0 | self.bitboards[WhiteQueen as usize].0
-            }
+    pub fn diagonal_bitboard_them<const COLOR: bool>(&self) -> u64 {
+        match COLOR {
+            WHITE => self.bitboards[BlackBishop as usize].0 | self.bitboards[BlackQueen as usize].0,
+            BLACK => self.bitboards[WhiteBishop as usize].0 | self.bitboards[WhiteQueen as usize].0,
         }
+    }
+
+    pub fn bitboard_const<const COLOR: bool>(&self, base_piece: BasePiece) -> u64 {
+        let base_piece = basepiece_to_piece::<COLOR>(base_piece);
+        self.bitboards[base_piece as usize].0
     }
 
     pub fn bitboard(&self, base_piece: BasePiece, color: Color) -> u64 {
@@ -197,6 +197,13 @@ impl Board {
 
     pub fn piece_at(&self, square: Square) -> Piece {
         self.piece_squares[square as usize]
+    }
+
+    pub fn king_square_const<const COLOR: bool>(&self) -> Square {
+        match COLOR {
+            WHITE => self.king_square(Color::White),
+            BLACK => self.king_square(Color::Black),
+        }
     }
 
     pub fn king_square(&self, color: Color) -> Square {
@@ -220,6 +227,20 @@ impl Board {
         }
     }
 
+    pub fn occupancy_them_const<const COLOR: bool>(&self) -> u64 {
+        match COLOR {
+            WHITE => self.black_occupancy,
+            BLACK => self.white_occupancy,
+        }
+    }
+
+    pub fn occupancy_us_const<const COLOR: bool>(&self) -> u64 {
+        match COLOR {
+            WHITE => self.white_occupancy,
+            BLACK => self.black_occupancy,
+        }
+    }
+
     pub fn occupancy(&self) -> u64 {
         self.occupancy
     }
@@ -232,6 +253,20 @@ impl Board {
         match self.can_en_passant {
             true => Some(self.en_passant_file),
             false => None,
+        }
+    }
+
+    pub fn has_short_castle_rights_const<const COLOR: bool>(&self) -> bool {
+        match COLOR {
+            WHITE => self.castling_rights & 0b0001 != 0,
+            BLACK => self.castling_rights & 0b0100 != 0,
+        }
+    }
+
+    pub fn has_long_castle_rights_const<const COLOR: bool>(&self) -> bool {
+        match COLOR {
+            WHITE => self.castling_rights & 0b0010 != 0,
+            BLACK => self.castling_rights & 0b1000 != 0,
         }
     }
 

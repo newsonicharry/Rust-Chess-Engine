@@ -1,11 +1,18 @@
 use std::fmt::Display;
+use std::mem;
 use std::ops::Not;
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum Color {
-    White,
     Black,
+    White,
+}
+
+impl From<bool> for Color {
+    fn from(side_to_move: bool) -> Self {
+        unsafe { mem::transmute(side_to_move) }
+    }
 }
 
 impl Not for Color {

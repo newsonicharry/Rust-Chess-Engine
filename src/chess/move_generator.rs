@@ -18,6 +18,9 @@ pub struct MoveGenerator<const GENERATOR_TYPE: bool> {}
 pub const GEN_ALL: bool = false;
 pub const GEN_TACTICS: bool = true;
 
+pub const WHITE: bool = true;
+pub const BLACK: bool = false;
+
 const PIN_RAY_MASK_SIZE: usize = NUM_SQUARES + 1;
 
 // bitboard of squares that cannot be attacked inorder for castling to be possible
@@ -35,12 +38,19 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
     pub fn generate(board: *mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
         let board: &mut Board = unsafe { &mut (*board) };
 
-        let (pieces_checking, allowed_squares) = Self::get_check_data(board);
+        match board.side_to_move() {
+            Color::White => Self::generator::<WHITE>(board, move_iter),
+            Color::Black => Self::generator::<BLACK>(board, move_iter),
+        }
+    }
+
+    fn generator<const COLOR: bool>(board: &mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
+        let (pieces_checking, allowed_squares) = Self::get_check_data::<COLOR>(board);
 
         let mut pin_ray_mask: [u64; PIN_RAY_MASK_SIZE] = [u64::MAX; PIN_RAY_MASK_SIZE];
         pin_ray_mask[PIN_RAY_MASK_SIZE - 1] = 0;
 
-        let pinned_pieces_mask = Self::get_pins(board, &mut pin_ray_mask);
+        let pinned_pieces_mask = Self::get_pins::<COLOR>(board, &mut pin_ray_mask);
 
         if pieces_checking != 0 {
             board.set_in_check(true);
@@ -48,7 +58,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             board.set_in_check(false);
         }
 
-        Self::update_pawn_moves(
+        Self::update_pawn_moves::<COLOR>(
             board,
             move_iter,
             allowed_squares,
@@ -56,13 +66,19 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             &pin_ray_mask,
         );
 
-        Self::update_knight_moves(board, move_iter, allowed_squares, pinned_pieces_mask);
+        Self::update_knight_moves::<COLOR>(board, move_iter, allowed_squares, pinned_pieces_mask);
 
-        Self::update_king_moves(board, move_iter, pieces_checking);
+        Self::update_king_moves::<COLOR>(board, move_iter, pieces_checking);
 
-        Self::update_slider_moves(Bishop, board, move_iter, allowed_squares, &pin_ray_mask);
-        Self::update_slider_moves(Rook, board, move_iter, allowed_squares, &pin_ray_mask);
-        Self::update_slider_moves(Queen, board, move_iter, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves::<COLOR>(
+            Bishop,
+            board,
+            move_iter,
+            allowed_squares,
+            &pin_ray_mask,
+        );
+        Self::update_slider_moves::<COLOR>(Rook, board, move_iter, allowed_squares, &pin_ray_mask);
+        Self::update_slider_moves::<COLOR>(Queen, board, move_iter, allowed_squares, &pin_ray_mask);
     }
 
     fn pop_lsb(b: &mut u64) -> u32 {
@@ -87,7 +103,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
-    fn get_enemy_attacks(
+    fn get_enemy_attacks<const COLOR: bool>(
         board: &Board,
         potential_short_castle: bool,
         potential_long_castle: bool,
@@ -107,10 +123,11 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
 
         let mut attack_mask: u64 = 0;
-        let king_square = board.king_square(board.side_to_move());
-        let king_mask_occupancy = MOVEMENT_MASKS.king[king_square as usize] & board.occupancy_us();
+        let king_square = board.king_square_const::<COLOR>();
+        let king_mask_occupancy =
+            MOVEMENT_MASKS.king[king_square as usize] & board.occupancy_us_const::<COLOR>();
 
-        let occupancy = board.occupancy() & !board.king_square(board.side_to_move()).mask();
+        let occupancy = board.occupancy() & !board.king_square_const::<COLOR>().mask();
 
         let lookup_data = KingAttackLookupData {
             king_square,
@@ -120,23 +137,25 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             potential_long_castle,
         };
 
-        let mut pawns = board.bitboard(BasePiece::Pawn, !board.side_to_move())
-            & KING_ATTACK_MASKS.pawn_lookup(&lookup_data);
+        let them: Color = (!COLOR).into();
 
-        let mut knights = board.bitboard(BasePiece::Knight, !board.side_to_move())
-            & KING_ATTACK_MASKS.knight_lookup(&lookup_data);
+        let mut pawns =
+            board.bitboard(BasePiece::Pawn, them) & KING_ATTACK_MASKS.pawn_lookup(&lookup_data);
 
-        let mut bishops = board.bitboard(BasePiece::Bishop, !board.side_to_move())
-            & KING_ATTACK_MASKS.bishop_lookup(&lookup_data);
+        let mut knights =
+            board.bitboard(BasePiece::Knight, them) & KING_ATTACK_MASKS.knight_lookup(&lookup_data);
 
-        let mut rooks = board.bitboard(BasePiece::Rook, !board.side_to_move())
-            & KING_ATTACK_MASKS.rook_lookup(&lookup_data);
+        let mut bishops =
+            board.bitboard(BasePiece::Bishop, them) & KING_ATTACK_MASKS.bishop_lookup(&lookup_data);
 
-        let mut queens = board.bitboard(BasePiece::Queen, !board.side_to_move())
-            & KING_ATTACK_MASKS.queen_lookup(&lookup_data);
+        let mut rooks =
+            board.bitboard(BasePiece::Rook, them) & KING_ATTACK_MASKS.rook_lookup(&lookup_data);
 
-        let mut kings = board.bitboard(BasePiece::King, !board.side_to_move())
-            & KING_ATTACK_MASKS.king_lookup(&lookup_data);
+        let mut queens =
+            board.bitboard(BasePiece::Queen, them) & KING_ATTACK_MASKS.queen_lookup(&lookup_data);
+
+        let mut kings =
+            board.bitboard(BasePiece::King, them) & KING_ATTACK_MASKS.king_lookup(&lookup_data);
 
         attack_mask_creation!(pawns, BasePiece::Pawn, attack_mask, board, occupancy);
         attack_mask_creation!(knights, BasePiece::Knight, attack_mask, board, occupancy);
@@ -148,16 +167,16 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         attack_mask
     }
 
-    fn get_check_data(board: &Board) -> (u64, u64) {
-        let king_square = board.king_square(board.side_to_move());
+    fn get_check_data<const COLOR: bool>(board: &Board) -> (u64, u64) {
+        let king_square = board.king_square_const::<COLOR>();
 
-        let enemy_orthogonal = board.orthogonal_bitboard_them();
-        let enemy_diagonal = board.diagonal_bitboard_them();
+        let enemy_orthogonal = board.orthogonal_bitboard_them::<COLOR>();
+        let enemy_diagonal = board.diagonal_bitboard_them::<COLOR>();
 
         let knight_checks =
-            MOVEMENT_MASKS.knight[king_square as usize] & board.bitboard_them(Knight);
-        let pawn_checks = MOVEMENT_MASKS.pawn_attacks(board.side_to_move(), king_square)
-            & board.bitboard_them(Pawn);
+            MOVEMENT_MASKS.knight[king_square as usize] & board.bitboard(Knight, (!COLOR).into());
+        let pawn_checks = MOVEMENT_MASKS.pawn_attacks_const::<COLOR>(king_square)
+            & board.bitboard(Pawn, (!COLOR).into());
 
         let regular_check: u64 = knight_checks | pawn_checks;
         let orthogonal_check: u64 = rook_lookup(king_square, board.occupancy()) & enemy_orthogonal;
@@ -217,7 +236,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         move_iter(PieceMoves::new_promote(to_mask, to_mask << shift));
     }
 
-    fn update_pawn_moves(
+    fn update_pawn_moves<const COLOR: bool>(
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
         allowed_squares: u64,
@@ -236,9 +255,8 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
         const BLACK_PROMOTE: u64 = 0xFF;
 
-        let pawn_bitboard = board.bitboard(Pawn, board.side_to_move()) & !pinned_piece_mask;
-        let mut pinned_pawn_bitboard =
-            board.bitboard(Pawn, board.side_to_move()) & pinned_piece_mask;
+        let pawn_bitboard = board.bitboard_const::<COLOR>(Pawn) & !pinned_piece_mask;
+        let mut pinned_pawn_bitboard = board.bitboard_const::<COLOR>(Pawn) & pinned_piece_mask;
 
         let middle_pawns = pawn_bitboard & !LEFT & !RIGHT;
 
@@ -252,7 +270,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         let mut left_pawn_attacks;
         let mut right_pawn_attacks;
 
-        if board.side_to_move().is_white() {
+        if COLOR == WHITE {
             right_pawn_attacks = ((pawn_bitboard & LEFT) | middle_pawns) << 9;
             left_pawn_attacks = ((pawn_bitboard & RIGHT) | middle_pawns) << 7;
 
@@ -318,17 +336,17 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         let raw_left_attacks = left_pawn_attacks;
         let raw_right_attacks = right_pawn_attacks;
 
-        left_pawn_attacks &= board.occupancy_them() & allowed_squares;
-        right_pawn_attacks &= board.occupancy_them() & allowed_squares;
+        left_pawn_attacks &= board.occupancy_them_const::<COLOR>() & allowed_squares;
+        right_pawn_attacks &= board.occupancy_them_const::<COLOR>() & allowed_squares;
 
-        left_attack_promotions &= board.occupancy_them() & allowed_squares;
-        right_attack_promotions &= board.occupancy_them() & allowed_squares;
+        left_attack_promotions &= board.occupancy_them_const::<COLOR>() & allowed_squares;
+        right_attack_promotions &= board.occupancy_them_const::<COLOR>() & allowed_squares;
 
         single_push_promotions &= !board.occupancy() & allowed_squares;
         single_push &= !board.occupancy() & allowed_squares;
         double_push &= !board.occupancy() & allowed_squares;
 
-        if board.side_to_move().is_white() {
+        if COLOR == WHITE {
             if GENERATOR_TYPE == GEN_ALL {
                 Self::iter_bulk_white(double_push, 16, MoveFlag::DoubleJump, move_iter);
                 Self::iter_bulk_white(single_push, 8, MoveFlag::None, move_iter);
@@ -354,7 +372,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             Self::iter_promote_black(right_attack_promotions, 7, move_iter);
         }
 
-        let king_square = board.king_square(board.side_to_move());
+        let king_square = board.king_square_const::<COLOR>();
 
         let calculate_discovered_enpassant_attack =
             |pawn_mask: u64, en_passant_attack_mask: u64, enemy_pawn_mask: u64| -> u64 {
@@ -365,8 +383,8 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 let new_blockers =
                     board.occupancy() & (!enemy_pawn_mask) & (!pawn_mask) | en_passant_attack_mask;
 
-                let enemy_orthogonal = board.orthogonal_bitboard_them();
-                let enemy_diagonal = board.diagonal_bitboard_them();
+                let enemy_orthogonal = board.orthogonal_bitboard_them::<COLOR>();
+                let enemy_diagonal = board.diagonal_bitboard_them::<COLOR>();
 
                 let no_orthogonal_attack =
                     rook_lookup(king_square, new_blockers) & enemy_orthogonal == 0;
@@ -381,7 +399,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             };
 
         if let Some(en_passant_file) = board.en_passant_file() {
-            if board.side_to_move().is_white() {
+            if COLOR == WHITE {
                 let en_passant_attack_square = en_passant_file as u8 + 40;
                 let en_passant_attack_mask = 1 << en_passant_attack_square;
 
@@ -471,22 +489,21 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
-    fn update_knight_moves(
+    fn update_knight_moves<const COLOR: bool>(
         board: &Board,
-        // move_list: &mut MoveList,
         move_iter: &mut impl FnMut(PieceMoves),
         mut allowed_squares: u64,
         pinned_pieces_mask: u64,
     ) {
         if GENERATOR_TYPE == GEN_TACTICS {
-            let enemy_king = board.king_square(!board.side_to_move());
+            let enemy_king = board.king_square_const::<COLOR>();
             let checking_squares = MOVEMENT_MASKS.knight[enemy_king as usize];
 
-            allowed_squares =
-                (allowed_squares & board.occupancy_them()) | (allowed_squares & checking_squares);
+            allowed_squares = (allowed_squares & board.occupancy_them_const::<COLOR>())
+                | (allowed_squares & checking_squares);
         }
 
-        let mut knight_bitboard = board.bitboard(Knight, board.side_to_move());
+        let mut knight_bitboard = board.bitboard_const::<COLOR>(Knight);
         while knight_bitboard != 0 {
             let square: Square = Self::pop_lsb(&mut knight_bitboard).into();
 
@@ -494,35 +511,35 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 continue;
             }
 
-            let knight_moves: u64 =
-                (MOVEMENT_MASKS.knight[square as usize]) & !board.occupancy_us() & allowed_squares;
+            let knight_moves: u64 = (MOVEMENT_MASKS.knight[square as usize])
+                & !board.occupancy_us_const::<COLOR>()
+                & allowed_squares;
 
             Self::iter_single(square, knight_moves, MoveFlag::None, move_iter);
         }
     }
 
-    fn update_slider_moves(
+    fn update_slider_moves<const COLOR: bool>(
         slider_type: BasePiece,
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
-        // move_list: &mut MoveList,
         mut allowed_squares: u64,
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
     ) {
         if GENERATOR_TYPE == GEN_TACTICS {
-            let enemy_king = board.king_square(!board.side_to_move());
+            let enemy_king = board.king_square_const::<COLOR>();
             let checking_squares = slider_lookup(slider_type, enemy_king, board.occupancy());
 
-            allowed_squares =
-                (allowed_squares & board.occupancy_them()) | (allowed_squares & checking_squares);
+            allowed_squares = (allowed_squares & board.occupancy_them_const::<COLOR>())
+                | (allowed_squares & checking_squares);
         }
 
-        let mut slider_bitboard = board.bitboard(slider_type, board.side_to_move());
+        let mut slider_bitboard = board.bitboard_const::<COLOR>(slider_type);
         while slider_bitboard != 0 {
             let square: Square = Self::pop_lsb(&mut slider_bitboard).into();
 
             let slider_moves: u64 = slider_lookup(slider_type, square, board.occupancy())
-                & !board.occupancy_us()
+                & !board.occupancy_us_const::<COLOR>()
                 & allowed_squares
                 & pin_ray_mask[square as usize];
 
@@ -530,40 +547,47 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
-    fn update_king_moves(
+    fn update_king_moves<const COLOR: bool>(
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
         pieces_checking: u64,
     ) {
-        let side_to_move = board.side_to_move();
-
-        let short_castle_not_occupied = match side_to_move {
-            Color::White => WHITE_SHORT_NOT_ATTACKED_SQUARES,
-            Color::Black => BLACK_SHORT_NOT_ATTACKED_SQUARES,
+        let short_castle_not_occupied = match COLOR {
+            WHITE => WHITE_SHORT_NOT_ATTACKED_SQUARES,
+            BLACK => BLACK_SHORT_NOT_ATTACKED_SQUARES,
         };
 
-        let long_castle_not_occupied = match side_to_move {
-            Color::White => WHITE_LONG_NOT_OCCUPIED_SQUARES,
-            Color::Black => BLACK_LONG_NOT_OCCUPIED_SQUARES,
+        let long_castle_not_occupied = match COLOR {
+            WHITE => WHITE_LONG_NOT_OCCUPIED_SQUARES,
+            BLACK => BLACK_LONG_NOT_OCCUPIED_SQUARES,
         };
 
-        let potental_short_castle = board.has_short_castle_rights(side_to_move)
+        let potental_short_castle = board.has_short_castle_rights_const::<COLOR>()
             && pieces_checking == 0
             && short_castle_not_occupied & board.occupancy() == 0;
 
-        let potental_long_castle = board.has_long_castle_rights(side_to_move)
+        let potental_long_castle = board.has_long_castle_rights_const::<COLOR>()
             && pieces_checking == 0
             && long_castle_not_occupied & board.occupancy() == 0;
 
-        let attack_squares =
-            Self::get_enemy_attacks(board, potental_short_castle, potental_long_castle);
-        let king_square = board.king_square(board.side_to_move());
+        let king_square = board.king_square_const::<COLOR>();
 
         let mut valid_moves: u64 =
-            (MOVEMENT_MASKS.king[king_square as usize]) & !board.occupancy_us() & !attack_squares;
+            (MOVEMENT_MASKS.king[king_square as usize]) & !board.occupancy_us_const::<COLOR>();
+
+        let mut attack_squares = 0;
+
+        if valid_moves != 0 {
+            attack_squares = Self::get_enemy_attacks::<COLOR>(
+                board,
+                potental_short_castle,
+                potental_long_castle,
+            );
+            valid_moves &= !attack_squares
+        }
 
         if GENERATOR_TYPE == GEN_TACTICS {
-            valid_moves &= board.occupancy_them();
+            valid_moves &= board.occupancy_them_const::<COLOR>();
             Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
             return;
         }
@@ -571,9 +595,9 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
 
         if potental_short_castle && (short_castle_not_occupied & attack_squares == 0) {
-            let move_to_square = match side_to_move {
-                Color::White => Square::G1,
-                Color::Black => Square::G8,
+            let move_to_square = match COLOR {
+                WHITE => Square::G1,
+                BLACK => Square::G8,
             };
 
             Self::iter_single(
@@ -584,14 +608,14 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             );
         }
 
-        let not_attacked_squares = match side_to_move {
-            Color::White => WHITE_LONG_NOT_ATTACKED_SQUARES,
-            Color::Black => BLACK_LONG_NOT_ATTACKED_SQUARES,
+        let not_attacked_squares = match COLOR {
+            WHITE => WHITE_LONG_NOT_ATTACKED_SQUARES,
+            BLACK => BLACK_LONG_NOT_ATTACKED_SQUARES,
         };
         if potental_long_castle && not_attacked_squares & attack_squares == 0 {
-            let move_to_square = match side_to_move {
-                Color::White => Square::C1,
-                Color::Black => Square::C8,
+            let move_to_square = match COLOR {
+                WHITE => Square::C1,
+                BLACK => Square::C8,
             };
 
             Self::iter_single(
@@ -603,13 +627,16 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
-    fn get_pins(board: &Board, pin_ray_mask: &mut [u64; PIN_RAY_MASK_SIZE]) -> u64 {
-        let friendly_king_square = board.king_square(board.side_to_move());
-        let friendly_pieces = board.occupancy_us();
-        let enemy_pieces = board.occupancy_them();
+    fn get_pins<const COLOR: bool>(
+        board: &Board,
+        pin_ray_mask: &mut [u64; PIN_RAY_MASK_SIZE],
+    ) -> u64 {
+        let friendly_king_square = board.king_square_const::<COLOR>();
+        let friendly_pieces = board.occupancy_us_const::<COLOR>();
+        let enemy_pieces = board.occupancy_them_const::<COLOR>();
 
-        let enemy_orthogonal = board.orthogonal_bitboard_them();
-        let enemy_diagonal = board.diagonal_bitboard_them();
+        let enemy_orthogonal = board.orthogonal_bitboard_them::<COLOR>();
+        let enemy_diagonal = board.diagonal_bitboard_them::<COLOR>();
 
         let possible_orthogonally_pinned: u64 =
             MOVEMENT_MASKS.rook[friendly_king_square as usize] & enemy_orthogonal;

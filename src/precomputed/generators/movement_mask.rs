@@ -1,5 +1,6 @@
 use crate::chess::consts;
 use crate::chess::consts::NUM_SQUARES;
+use crate::chess::move_generator::{BLACK, WHITE};
 use crate::chess::types::color::Color;
 use crate::chess::types::square::Square;
 use crate::precomputed::generators::helpers::{
@@ -83,6 +84,13 @@ impl MovementMasks {
         match color {
             Color::White => self.white_pawn_attacks[square as usize],
             Color::Black => self.black_pawn_attacks[square as usize],
+        }
+    }
+
+    pub fn pawn_attacks_const<const COLOR: bool>(&self, square: Square) -> u64 {
+        match COLOR {
+            WHITE => self.white_pawn_attacks[square as usize],
+            BLACK => self.black_pawn_attacks[square as usize],
         }
     }
 

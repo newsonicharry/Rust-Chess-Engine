@@ -145,7 +145,7 @@ pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
     if depth == 1 {
         all_nodes += start_pos_moves.move_count() as u64;
         for curr_move in start_pos_moves.iter() {
-            println!("{curr_move}: 1");
+            println!("{curr_move}");
         }
     } else {
         for curr_move in start_pos_moves.iter() {

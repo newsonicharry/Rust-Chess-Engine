@@ -33,6 +33,10 @@ impl From<(BasePiece, Color)> for Piece {
     }
 }
 
+pub fn basepiece_to_piece<const COLOR: bool>(base_piece: BasePiece) -> Piece {
+    Piece::from((base_piece, COLOR.into()))
+}
+
 impl Display for Piece {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let char = match self {
