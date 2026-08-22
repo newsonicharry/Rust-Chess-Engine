@@ -1,6 +1,6 @@
 use crate::chess::board::Board;
-use crate::chess::move_generator::GEN_ALL;
 use crate::chess::move_generator::MoveGenerator;
+use crate::chess::move_generator::{GEN_ALL, NOT_LEAF};
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
@@ -43,13 +43,17 @@ fn main() {
     // return;
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
-        if args[1] == "pgo-test" {
-            run_self_play();
+        match args[1].as_str() {
+            "pgo-chess" => run_self_play(),
+            "pgo-perft" => run_perft_pgo(),
+            _ => {
+                println!(
+                    "Unexpected argument {} expected pgo-chess or pgo-perft",
+                    args[1]
+                );
+            }
         }
 
-        if args[1] == "pgo-perft" {
-            run_perft_pgo();
-        }
         return;
     }
 
@@ -79,7 +83,7 @@ fn main() {
                 println!("uciok");
             }
             Commands::IsReady => println!("readyok"),
-            Commands::Quit => exit(1),
+            Commands::Quit => exit(0),
 
             Commands::Help => println!("{}", HELP_MSG),
 
@@ -371,7 +375,7 @@ pub fn run_self_play() {
             // println!("{board}");
 
             let mut valid_moves = MoveList::default();
-            MoveGenerator::<GEN_ALL>::generate(&mut board, &mut |mut piece_moves| {
+            MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(&mut board, &mut |mut piece_moves| {
                 valid_moves.add_piece_moves(&mut piece_moves);
             });
 

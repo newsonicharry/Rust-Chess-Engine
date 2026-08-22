@@ -15,6 +15,9 @@ use crate::precomputed::generators::king_attack_masks::KingAttackLookupData;
 
 pub struct MoveGenerator<const GENERATOR_TYPE: bool> {}
 
+pub const IS_LEAF: bool = true;
+pub const NOT_LEAF: bool = false;
+
 pub const GEN_ALL: bool = false;
 pub const GEN_TACTICS: bool = true;
 
@@ -35,16 +38,25 @@ pub const WHITE_LONG_NOT_OCCUPIED_SQUARES: u64 = 14;
 pub const BLACK_LONG_NOT_OCCUPIED_SQUARES: u64 = 0xE00000000000000;
 
 impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
-    pub fn generate(board: *mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
+    pub fn generate<const IS_LEAF: bool>(
+        board: *mut Board,
+        move_iter: &mut impl FnMut(PieceMoves),
+    ) -> u64 {
         let board: &mut Board = unsafe { &mut (*board) };
 
         match board.side_to_move() {
-            Color::White => Self::generator::<WHITE>(board, move_iter),
-            Color::Black => Self::generator::<BLACK>(board, move_iter),
+            Color::White => Self::const_generate::<WHITE, IS_LEAF>(board, move_iter),
+            Color::Black => Self::const_generate::<BLACK, IS_LEAF>(board, move_iter),
         }
     }
 
-    fn generator<const COLOR: bool>(board: &mut Board, move_iter: &mut impl FnMut(PieceMoves)) {
+    #[inline(always)]
+    pub fn const_generate<const COLOR: bool, const IS_LEAF: bool>(
+        board: *mut Board,
+        move_iter: &mut impl FnMut(PieceMoves),
+    ) -> u64 {
+        let board: &mut Board = unsafe { &mut (*board) };
+
         let (pieces_checking, allowed_squares) = Self::get_check_data::<COLOR>(board);
 
         let mut pin_ray_mask: [u64; PIN_RAY_MASK_SIZE] = [u64::MAX; PIN_RAY_MASK_SIZE];
@@ -58,7 +70,9 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             board.set_in_check(false);
         }
 
-        Self::update_pawn_moves::<COLOR>(
+        let mut count = 0;
+
+        count += Self::update_pawn_moves::<COLOR, IS_LEAF>(
             board,
             move_iter,
             allowed_squares,
@@ -66,19 +80,26 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             &pin_ray_mask,
         );
 
-        Self::update_knight_moves::<COLOR>(board, move_iter, allowed_squares, pinned_pieces_mask);
-
-        Self::update_king_moves::<COLOR>(board, move_iter, pieces_checking);
-
-        Self::update_slider_moves::<COLOR>(
-            Bishop,
+        count += Self::update_knight_moves::<COLOR, IS_LEAF>(
             board,
             move_iter,
             allowed_squares,
-            &pin_ray_mask,
+            pinned_pieces_mask,
         );
-        Self::update_slider_moves::<COLOR>(Rook, board, move_iter, allowed_squares, &pin_ray_mask);
-        Self::update_slider_moves::<COLOR>(Queen, board, move_iter, allowed_squares, &pin_ray_mask);
+
+        count += Self::update_king_moves::<COLOR, IS_LEAF>(board, move_iter, pieces_checking);
+
+        for piece in [Bishop, Rook, Queen] {
+            count += Self::update_slider_moves::<COLOR, IS_LEAF>(
+                piece,
+                board,
+                move_iter,
+                allowed_squares,
+                &pin_ray_mask,
+            );
+        }
+
+        return count as u64;
     }
 
     fn pop_lsb(b: &mut u64) -> u32 {
@@ -103,6 +124,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
     }
 
+    #[inline(always)]
     fn get_enemy_attacks<const COLOR: bool>(
         board: &Board,
         potential_short_castle: bool,
@@ -167,6 +189,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         attack_mask
     }
 
+    #[inline(always)]
     fn get_check_data<const COLOR: bool>(board: &Board) -> (u64, u64) {
         let king_square = board.king_square_const::<COLOR>();
 
@@ -236,13 +259,14 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         move_iter(PieceMoves::new_promote(to_mask, to_mask << shift));
     }
 
-    fn update_pawn_moves<const COLOR: bool>(
+    #[inline(always)]
+    fn update_pawn_moves<const COLOR: bool, const IS_LEAF: bool>(
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
         allowed_squares: u64,
         pinned_piece_mask: u64,
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
-    ) {
+    ) -> u32 {
         const RIGHT: u64 = 0x8080808080808080;
         const LEFT: u64 = 0x101010101010101;
 
@@ -346,7 +370,15 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         single_push &= !board.occupancy() & allowed_squares;
         double_push &= !board.occupancy() & allowed_squares;
 
-        if COLOR == WHITE {
+        let mut count: u32 = 0;
+
+        if IS_LEAF {
+            count += double_push.count_ones() + single_push.count_ones();
+            count += left_pawn_attacks.count_ones() + right_pawn_attacks.count_ones();
+            count += single_push_promotions.count_ones() * 4
+                + left_attack_promotions.count_ones() * 4
+                + right_attack_promotions.count_ones() * 4;
+        } else if COLOR == WHITE {
             if GENERATOR_TYPE == GEN_ALL {
                 Self::iter_bulk_white(double_push, 16, MoveFlag::DoubleJump, move_iter);
                 Self::iter_bulk_white(single_push, 8, MoveFlag::None, move_iter);
@@ -425,6 +457,12 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     enemy_pawn_mask,
                 );
 
+                if IS_LEAF {
+                    count += right_pawn_position.count_ones();
+                    count += left_pawn_position.count_ones();
+                    return count;
+                }
+
                 if right_pawn_position != 0 {
                     Self::iter_single(
                         Square::from(bits::next(right_pawn_position)),
@@ -468,6 +506,12 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     enemy_pawn_mask,
                 );
 
+                if IS_LEAF {
+                    count += right_pawn_position.count_ones();
+                    count += left_pawn_position.count_ones();
+                    return count;
+                }
+
                 if right_pawn_position != 0 {
                     Self::iter_single(
                         Square::from(bits::next(right_pawn_position)),
@@ -487,14 +531,17 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 }
             }
         }
+
+        return count;
     }
 
-    fn update_knight_moves<const COLOR: bool>(
+    #[inline(always)]
+    fn update_knight_moves<const COLOR: bool, const IS_LEAF: bool>(
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
         mut allowed_squares: u64,
         pinned_pieces_mask: u64,
-    ) {
+    ) -> u32 {
         if GENERATOR_TYPE == GEN_TACTICS {
             let enemy_king = board.king_square_const::<COLOR>();
             let checking_squares = MOVEMENT_MASKS.knight[enemy_king as usize];
@@ -503,7 +550,9 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 | (allowed_squares & checking_squares);
         }
 
+        let mut count = 0;
         let mut knight_bitboard = board.bitboard_const::<COLOR>(Knight);
+
         while knight_bitboard != 0 {
             let square: Square = Self::pop_lsb(&mut knight_bitboard).into();
 
@@ -515,17 +564,24 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 & !board.occupancy_us_const::<COLOR>()
                 & allowed_squares;
 
-            Self::iter_single(square, knight_moves, MoveFlag::None, move_iter);
+            if IS_LEAF {
+                count += knight_moves.count_ones();
+            } else {
+                Self::iter_single(square, knight_moves, MoveFlag::None, move_iter);
+            }
         }
+
+        return count;
     }
 
-    fn update_slider_moves<const COLOR: bool>(
+    #[inline(always)]
+    fn update_slider_moves<const COLOR: bool, const IS_LEAF: bool>(
         slider_type: BasePiece,
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
         mut allowed_squares: u64,
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
-    ) {
+    ) -> u32 {
         if GENERATOR_TYPE == GEN_TACTICS {
             let enemy_king = board.king_square_const::<COLOR>();
             let checking_squares = slider_lookup(slider_type, enemy_king, board.occupancy());
@@ -534,6 +590,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 | (allowed_squares & checking_squares);
         }
 
+        let mut count = 0;
         let mut slider_bitboard = board.bitboard_const::<COLOR>(slider_type);
         while slider_bitboard != 0 {
             let square: Square = Self::pop_lsb(&mut slider_bitboard).into();
@@ -543,15 +600,22 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 & allowed_squares
                 & pin_ray_mask[square as usize];
 
-            Self::iter_single(square, slider_moves, MoveFlag::None, move_iter);
+            if IS_LEAF {
+                count += slider_moves.count_ones();
+            } else {
+                Self::iter_single(square, slider_moves, MoveFlag::None, move_iter);
+            }
         }
+
+        return count;
     }
 
-    fn update_king_moves<const COLOR: bool>(
+    #[inline(always)]
+    fn update_king_moves<const COLOR: bool, const IS_LEAF: bool>(
         board: &Board,
         move_iter: &mut impl FnMut(PieceMoves),
         pieces_checking: u64,
-    ) {
+    ) -> u32 {
         let short_castle_not_occupied = match COLOR {
             WHITE => WHITE_SHORT_NOT_ATTACKED_SQUARES,
             BLACK => BLACK_SHORT_NOT_ATTACKED_SQUARES,
@@ -589,10 +653,15 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         if GENERATOR_TYPE == GEN_TACTICS {
             valid_moves &= board.occupancy_them_const::<COLOR>();
             Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
-            return;
+            return 0;
         }
 
-        Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
+        let mut count = 0;
+        if IS_LEAF {
+            count += valid_moves.count_ones();
+        } else {
+            Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
+        }
 
         if potental_short_castle && (short_castle_not_occupied & attack_squares == 0) {
             let move_to_square = match COLOR {
@@ -600,12 +669,16 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 BLACK => Square::G8,
             };
 
-            Self::iter_single(
-                king_square,
-                move_to_square.mask(),
-                MoveFlag::CastleShort,
-                move_iter,
-            );
+            if IS_LEAF {
+                count += 1;
+            } else {
+                Self::iter_single(
+                    king_square,
+                    move_to_square.mask(),
+                    MoveFlag::CastleShort,
+                    move_iter,
+                );
+            }
         }
 
         let not_attacked_squares = match COLOR {
@@ -618,15 +691,22 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 BLACK => Square::C8,
             };
 
-            Self::iter_single(
-                king_square,
-                move_to_square.mask(),
-                MoveFlag::CastleLong,
-                move_iter,
-            );
+            if IS_LEAF {
+                count += 1;
+            } else {
+                Self::iter_single(
+                    king_square,
+                    move_to_square.mask(),
+                    MoveFlag::CastleLong,
+                    move_iter,
+                );
+            }
         }
+
+        return count;
     }
 
+    #[inline(always)]
     fn get_pins<const COLOR: bool>(
         board: &Board,
         pin_ray_mask: &mut [u64; PIN_RAY_MASK_SIZE],

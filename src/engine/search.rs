@@ -2,7 +2,7 @@ use crate::chess::board::Board;
 use crate::chess::consts;
 use crate::chess::consts::PIECE_VALUES;
 use crate::chess::move_generator::MoveGenerator;
-use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS};
+use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS, NOT_LEAF};
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color::White;
@@ -97,7 +97,7 @@ impl Searcher {
         }
 
         let mut move_list = MoveList::default();
-        MoveGenerator::<GEN_ALL>::generate(&mut self.board, &mut |mut piece_moves| {
+        MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(&mut self.board, &mut |mut piece_moves| {
             move_list.add_piece_moves(&mut piece_moves);
         });
 
@@ -395,7 +395,7 @@ impl Searcher {
         }
 
         let mut all_move_list = MoveList::default();
-        MoveGenerator::<GEN_ALL>::generate(&mut self.board, &mut |mut piece_moves| {
+        MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(&mut self.board, &mut |mut piece_moves| {
             all_move_list.add_piece_moves(&mut piece_moves);
         });
 
@@ -407,9 +407,12 @@ impl Searcher {
         }
 
         let mut tactial_move_list = MoveList::default();
-        MoveGenerator::<GEN_TACTICS>::generate(&mut self.board, &mut |mut piece_moves| {
-            tactial_move_list.add_piece_moves(&mut piece_moves);
-        });
+        MoveGenerator::<GEN_TACTICS>::generate::<NOT_LEAF>(
+            &mut self.board,
+            &mut |mut piece_moves| {
+                tactial_move_list.add_piece_moves(&mut piece_moves);
+            },
+        );
 
         let mut node_type = TTFlag::Upper;
         let mut best_move = tactial_move_list.move_at(0);
@@ -472,9 +475,12 @@ impl Searcher {
                 let best_move = entry.cur_move;
 
                 let mut valid_moves = MoveList::default();
-                MoveGenerator::<GEN_ALL>::generate(&mut board_clone, &mut |mut piece_moves| {
-                    valid_moves.add_piece_moves(&mut piece_moves);
-                });
+                MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(
+                    &mut board_clone,
+                    &mut |mut piece_moves| {
+                        valid_moves.add_piece_moves(&mut piece_moves);
+                    },
+                );
 
                 if !valid_moves.contains_move(best_move) {
                     break;
