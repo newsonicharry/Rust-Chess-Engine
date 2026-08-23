@@ -4,6 +4,7 @@ use crate::chess::board::Board;
 use crate::chess::move_generator::{BLACK, GEN_ALL, WHITE};
 use crate::chess::move_generator::{IS_LEAF, MoveGenerator, NOT_LEAF};
 use crate::chess::move_list::MoveList;
+use crate::chess::types::color::Color;
 use std::time::Instant;
 
 struct PerftTT {
@@ -114,11 +115,41 @@ fn search_b_1<const PERFT_TYPE: u8, const DISPLAY: bool>(
 generate_specific_depth!(search_w_2, search_b_1, search_b_2, search_w_1);
 generate_specific_depth!(search_w_3, search_b_2, search_b_3, search_w_2);
 generate_specific_depth!(search_w_4, search_b_3, search_b_4, search_w_3);
-generate_specific_depth!(search_w_5, search_b_4, search_b_5, search_w_4);
-generate_specific_depth!(search_w_6, search_b_5, search_b_6, search_w_5);
-generate_specific_depth!(search_w_7, search_b_6, search_b_7, search_w_6);
-generate_specific_depth!(search_w_8, search_b_7, search_b_8, search_w_7);
-// depth_generator!(search_w_9, search_b_8, search_b_9, search_w_8);
+
+fn search<const PERFT_TYPE: u8, const DISPLAY: bool>(
+    board: *mut Board,
+    depth: u8,
+    mut num_nodes: u64,
+) -> u64 {
+    if depth == 4 {
+        return match unsafe { (*board).side_to_move() } {
+            Color::White => search_w_4::<PERFT_TYPE, false>(board, num_nodes),
+            Color::Black => search_b_4::<PERFT_TYPE, false>(board, num_nodes),
+        };
+    }
+
+    MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(board, &mut |piece_moves| {
+        for curr_move in piece_moves {
+            unsafe {
+                (*board).make_move::<false>(&curr_move);
+            }
+
+            let curr_nodes = search::<PERFT_TYPE, false>(board, depth - 1, 0);
+
+            if DISPLAY {
+                println!("{curr_move}: {curr_nodes}");
+            }
+
+            num_nodes += curr_nodes;
+
+            unsafe {
+                (*board).undo_move();
+            }
+        }
+    });
+
+    num_nodes
+}
 
 pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
     let mut transposition = PerftTT::new(128);
@@ -133,31 +164,14 @@ pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
     let all_nodes = match (depth, board.side_to_move().is_white()) {
         (1, WHITE) => search_w_1::<BULK_PERFT, true>(board, 0),
         (1, BLACK) => search_b_1::<BULK_PERFT, true>(board, 0),
-
         (2, WHITE) => search_w_2::<BULK_PERFT, true>(board, 0),
         (2, BLACK) => search_b_2::<BULK_PERFT, true>(board, 0),
-
         (3, WHITE) => search_w_3::<BULK_PERFT, true>(board, 0),
         (3, BLACK) => search_b_3::<BULK_PERFT, true>(board, 0),
-
         (4, WHITE) => search_w_4::<BULK_PERFT, true>(board, 0),
         (4, BLACK) => search_b_4::<BULK_PERFT, true>(board, 0),
 
-        (5, WHITE) => search_w_5::<BULK_PERFT, true>(board, 0),
-        (5, BLACK) => search_b_5::<BULK_PERFT, true>(board, 0),
-
-        (6, WHITE) => search_w_6::<BULK_PERFT, true>(board, 0),
-        (6, BLACK) => search_b_6::<BULK_PERFT, true>(board, 0),
-
-        (7, WHITE) => search_w_7::<BULK_PERFT, true>(board, 0),
-        (7, BLACK) => search_b_7::<BULK_PERFT, true>(board, 0),
-
-        (8, WHITE) => search_w_8::<BULK_PERFT, true>(board, 0),
-        (8, BLACK) => search_b_8::<BULK_PERFT, true>(board, 0),
-        _ => {
-            println!("Unexpected depth");
-            return 0;
-        }
+        _ => search::<PERFT_TYPE, true>(board, depth, 0),
     };
 
     let nodes_per_second = all_nodes as f64 / (timer.elapsed().as_secs_f64());

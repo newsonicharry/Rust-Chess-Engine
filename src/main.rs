@@ -1,3 +1,4 @@
+
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::{GEN_ALL, NOT_LEAF};
