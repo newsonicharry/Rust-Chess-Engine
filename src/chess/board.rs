@@ -1,6 +1,5 @@
 use crate::chess::bitboard::Bitboard;
-use crate::chess::board_state::BoardState;
-use crate::chess::consts::{MAX_MOVES, NUM_PIECES, NUM_SQUARES};
+use crate::chess::consts::{MAX_MOVES, NUM_BASE_PIECES, NUM_PIECES, NUM_SQUARES};
 use crate::chess::move_generator::{BLACK, WHITE};
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
@@ -11,7 +10,8 @@ use crate::chess::types::piece::Piece::{
     WhitePawn, WhiteQueen, WhiteRook,
 };
 use crate::chess::types::piece::{
-    BasePiece, ITER_BLACK, ITER_WHITE, Piece, basepiece_to_piece, char_to_piece,
+    BISHOP, BasePiece, ITER_BLACK, ITER_WHITE, KING, KNIGHT, PAWN, Piece, QUEEN, ROOK,
+    basepiece_to_piece, char_to_piece,
 };
 use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
@@ -24,14 +24,12 @@ const SQUARE_MOVED_CASTLING: [u8; NUM_SQUARES] = [
     15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
     15, 15, 15, 15, 15, 15, 15, 15, 7, 15, 15, 15, 3, 15, 15, 11,
 ];
-const INCREMENT_ZOBRIST: bool = true;
-const IGNORE_ZOBRIST: bool = false;
+pub const INCREMENT_ZOBRIST: bool = true;
+pub const NO_ZOBRIST: bool = false;
 
 #[derive(Copy, Clone)]
 pub struct Board {
     bitboards: [Bitboard; NUM_PIECES],
-    piece_squares: [Piece; NUM_SQUARES],
-
     side_to_move: Color,
 
     white_occupancy: u64,
@@ -44,17 +42,12 @@ pub struct Board {
     half_move_clock: u8,
     zobrist: u64,
     in_check: bool,
-
-    board_states: [BoardState; MAX_MOVES],
-    cur_board_state: usize,
 }
 
 impl Default for Board {
     fn default() -> Board {
         let board = Board {
             bitboards: [Bitboard::default(); NUM_PIECES],
-            piece_squares: [NoPiece; NUM_SQUARES],
-
             side_to_move: Color::White,
 
             white_occupancy: 0,
@@ -67,9 +60,6 @@ impl Default for Board {
             half_move_clock: 0,
             zobrist: 0,
             in_check: false,
-
-            board_states: [BoardState::default(); MAX_MOVES],
-            cur_board_state: 0,
         };
 
         board
@@ -100,7 +90,23 @@ impl Board {
                 cur_file.plus();
                 let piece = char_to_piece(char).unwrap();
 
-                self.add_piece::<IGNORE_ZOBRIST>(piece, cur_square);
+                match piece {
+                    Piece::WhitePawn => self.add_piece::<PAWN, WHITE, NO_ZOBRIST>(cur_square),
+                    Piece::WhiteKnight => self.add_piece::<KNIGHT, WHITE, NO_ZOBRIST>(cur_square),
+                    Piece::WhiteBishop => self.add_piece::<BISHOP, WHITE, NO_ZOBRIST>(cur_square),
+                    Piece::WhiteRook => self.add_piece::<ROOK, WHITE, NO_ZOBRIST>(cur_square),
+                    Piece::WhiteQueen => self.add_piece::<QUEEN, WHITE, NO_ZOBRIST>(cur_square),
+                    Piece::WhiteKing => self.add_piece::<KING, WHITE, NO_ZOBRIST>(cur_square),
+
+                    Piece::BlackPawn => self.add_piece::<PAWN, BLACK, NO_ZOBRIST>(cur_square),
+                    Piece::BlackKnight => self.add_piece::<KNIGHT, BLACK, NO_ZOBRIST>(cur_square),
+                    Piece::BlackBishop => self.add_piece::<BISHOP, BLACK, NO_ZOBRIST>(cur_square),
+                    Piece::BlackRook => self.add_piece::<ROOK, BLACK, NO_ZOBRIST>(cur_square),
+                    Piece::BlackQueen => self.add_piece::<QUEEN, BLACK, NO_ZOBRIST>(cur_square),
+                    Piece::BlackKing => self.add_piece::<KING, BLACK, NO_ZOBRIST>(cur_square),
+
+                    Piece::NoPiece => {}
+                }
             }
         }
         let side_to_move_str = split_fen.get(1).unwrap();
@@ -126,7 +132,7 @@ impl Board {
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
-    pub fn is_repetition(&self) -> bool {
+    /* pub fn is_repetition(&self) -> bool {
         let Some(board_states) = self.past_board_states() else {
             return false;
         };
@@ -141,7 +147,7 @@ impl Board {
             }
         }
         return false;
-    }
+    } */
 
     pub fn set_in_check(&mut self, in_check: bool) {
         self.in_check = in_check;
@@ -151,14 +157,14 @@ impl Board {
         self.in_check
     }
 
-    pub fn last_move(&self) -> Option<MovePly> {
+    /* pub fn last_move(&self) -> Option<MovePly> {
         if self.cur_board_state == 0 {
             return None;
         }
 
         let last_move = self.board_states[self.cur_board_state - 1].played;
         Some(last_move)
-    }
+    } */
 
     pub fn orthogonal_bitboard_them<const COLOR: bool>(&self) -> u64 {
         match COLOR {
@@ -196,7 +202,15 @@ impl Board {
     }
 
     pub fn piece_at(&self, square: Square) -> Piece {
-        self.piece_squares[square as usize]
+        let mask = square.mask();
+        for index in (0..NUM_PIECES) {
+            if self.bitboards[index] & mask != 0 {
+                return unsafe { std::mem::transmute(index as u8) };
+            }
+        }
+
+        return Piece::NoPiece;
+        // self.piece_squares[square as usize]
     }
 
     pub fn king_square_const<const COLOR: bool>(&self) -> Square {
@@ -288,13 +302,13 @@ impl Board {
         self.zobrist
     }
 
-    pub fn past_board_states(&self) -> Option<&[BoardState]> {
+    /* pub fn past_board_states(&self) -> Option<&[BoardState]> {
         if self.cur_board_state > 0 {
             return Some(&self.board_states[..(self.cur_board_state)]);
         }
 
         None
-    }
+    } */
 
     pub fn half_move_clock(&self) -> u8 {
         self.half_move_clock
@@ -318,28 +332,18 @@ impl Board {
         }
     }
 
-    fn push_board_state(&mut self, played: MovePly, captured: Piece) {
-        self.board_states[self.cur_board_state] = BoardState {
-            played,
-            captured,
-            half_move_clock: self.half_move_clock,
-            castling_rights: self.castling_rights,
-            en_passant_file: self.en_passant_file,
-            can_en_passant: self.can_en_passant,
-            zobrist: self.zobrist,
-            in_check: self.in_check,
-        };
-        self.cur_board_state += 1;
-    }
     #[inline(always)]
-    fn add_piece<const ZOBRIST_OPTION: bool>(&mut self, piece: Piece, square: Square) {
+    fn add_piece<const PIECE: u8, const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        square: Square,
+    ) {
+        let piece = Piece::from((PIECE.into(), COLOR.into()));
+
         self.bitboards[piece as usize].add_piece(square);
-        self.piece_squares[square as usize] = piece;
-        self.occupancy ^= square.mask();
 
-        match piece.color() {
-            Color::White => self.white_occupancy ^= square.mask(),
-            Color::Black => self.black_occupancy ^= square.mask(),
+        match COLOR {
+            WHITE => self.white_occupancy ^= square.mask(),
+            BLACK => self.black_occupancy ^= square.mask(),
         }
 
         if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
@@ -347,14 +351,17 @@ impl Board {
         }
     }
     #[inline(always)]
-    fn remove_piece<const ZOBRIST_OPTION: bool>(&mut self, piece: Piece, square: Square) {
+    fn remove_piece<const PIECE: u8, const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        square: Square,
+    ) {
+        let piece = Piece::from((PIECE.into(), COLOR.into()));
+
         self.bitboards[piece as usize].remove_piece(square);
-        self.piece_squares[square as usize] = NoPiece;
-        self.occupancy ^= square.mask();
 
-        match piece.color() {
-            Color::White => self.white_occupancy ^= square.mask(),
-            Color::Black => self.black_occupancy ^= square.mask(),
+        match COLOR {
+            WHITE => self.white_occupancy ^= square.mask(),
+            BLACK => self.black_occupancy ^= square.mask(),
         }
 
         if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
@@ -362,23 +369,25 @@ impl Board {
         }
     }
     #[inline(always)]
-    fn move_piece<const ZOBRIST_OPTION: bool>(&mut self, piece: Piece, from: Square, to: Square) {
+    fn move_piece<const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        from: Square,
+        to: Square,
+        moving_piece: BasePiece,
+    ) {
+        let piece = basepiece_to_piece::<COLOR>(moving_piece);
         self.bitboards[piece as usize].move_piece(from, to);
-        self.occupancy ^= from.mask();
-        self.occupancy ^= to.mask();
 
-        match piece.color() {
-            Color::White => {
+        match COLOR {
+            WHITE => {
                 self.white_occupancy ^= from.mask();
                 self.white_occupancy ^= to.mask();
             }
-            Color::Black => {
+            BLACK => {
                 self.black_occupancy ^= from.mask();
                 self.black_occupancy ^= to.mask();
             }
         }
-        self.piece_squares[from as usize] = NoPiece;
-        self.piece_squares[to as usize] = piece;
 
         if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
             self.zobrist ^= ZOBRIST.square_zobrist(piece, from);
@@ -386,130 +395,101 @@ impl Board {
         }
     }
 
-    fn apply_quiet<const ZOBRIST_OPTION: bool>(&mut self, played: &MovePly) {
-        let from = played.from();
-        self.move_piece::<ZOBRIST_OPTION>(self.piece_at(from), from, played.to())
+    #[inline(always)]
+    fn apply_quiet<const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        played: &MovePly,
+        piece: BasePiece,
+    ) {
+        self.move_piece::<COLOR, ZOBRIST_OPTION>(played.from(), played.to(), piece)
     }
 
-    fn apply_double_jump<const ZOBRIST_OPTION: bool>(&mut self, played: &MovePly) {
+    #[inline(always)]
+    fn apply_double_jump<const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        played: &MovePly,
+        piece: BasePiece,
+    ) {
         self.en_passant_file = played.from().file();
         self.can_en_passant = true;
-        self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
-        self.apply_quiet::<ZOBRIST_OPTION>(played);
+
+        if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
+            self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
+        }
+        self.apply_quiet::<COLOR, ZOBRIST_OPTION>(played, piece);
     }
 
-    fn apply_short_castle<const ZOBRIST_OPTION: bool>(&mut self) {
+    #[inline(always)]
+    fn apply_short_castle<const COLOR: bool, const ZOBRIST_OPTION: bool>(&mut self) {
         // we dont update the zobrist for short castle here becuase we already did that in update castling rights
+        match COLOR {
+            WHITE => {
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::E1, Square::G1, BasePiece::King);
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::H1, Square::F1, BasePiece::Rook);
+            }
+            BLACK => {
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::E8, Square::G8, BasePiece::King);
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::H8, Square::F8, BasePiece::Rook);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn apply_long_castle<const COLOR: bool, const ZOBRIST_OPTION: bool>(&mut self) {
         match self.side_to_move {
             Color::White => {
-                self.move_piece::<ZOBRIST_OPTION>(WhiteKing, Square::E1, Square::G1);
-                self.move_piece::<ZOBRIST_OPTION>(WhiteRook, Square::H1, Square::F1);
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::E1, Square::C1, BasePiece::King);
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::A1, Square::D1, BasePiece::Rook);
             }
             Color::Black => {
-                self.move_piece::<ZOBRIST_OPTION>(BlackKing, Square::E8, Square::G8);
-                self.move_piece::<ZOBRIST_OPTION>(BlackRook, Square::H8, Square::F8);
-            }
-        }
-    }
-    fn apply_long_castle<const ZOBRIST_OPTION: bool>(&mut self) {
-        match self.side_to_move {
-            Color::White => {
-                self.move_piece::<ZOBRIST_OPTION>(WhiteKing, Square::E1, Square::C1);
-                self.move_piece::<ZOBRIST_OPTION>(WhiteRook, Square::A1, Square::D1);
-            }
-            Color::Black => {
-                self.move_piece::<ZOBRIST_OPTION>(BlackKing, Square::E8, Square::C8);
-                self.move_piece::<ZOBRIST_OPTION>(BlackRook, Square::A8, Square::D8);
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::E8, Square::C8, BasePiece::King);
+                self.move_piece::<COLOR, ZOBRIST_OPTION>(Square::A8, Square::D8, BasePiece::Rook);
             }
         }
     }
 
-    fn apply_promotion<const ZOBRIST_OPTION: bool>(&mut self, played: &MovePly) {
-        self.remove_piece::<ZOBRIST_OPTION>(self.piece_at(played.from()), played.from());
-        self.add_piece::<ZOBRIST_OPTION>(
-            played.flag().promotion_piece(self.side_to_move),
-            played.to(),
-        );
-    }
+    #[inline(always)]
+    fn apply_promotion<const COLOR: bool, const ZOBRIST_OPTION: bool>(&mut self, played: &MovePly) {
+        self.remove_piece::<PAWN, COLOR, ZOBRIST_OPTION>(played.from());
+        match played.flag().base_promotion_piece() {
+            BasePiece::Knight => self.add_piece::<KNIGHT, COLOR, ZOBRIST_OPTION>(played.to()),
+            BasePiece::Bishop => self.add_piece::<BISHOP, COLOR, ZOBRIST_OPTION>(played.to()),
+            BasePiece::Rook => self.add_piece::<ROOK, COLOR, ZOBRIST_OPTION>(played.to()),
+            BasePiece::Queen => self.add_piece::<QUEEN, COLOR, ZOBRIST_OPTION>(played.to()),
 
-    fn apply_en_passant<const ZOBRIST_OPTION: bool>(&mut self, played: &MovePly) {
-        self.apply_quiet::<ZOBRIST_OPTION>(played);
-
-        match self.side_to_move {
-            Color::White => self.remove_piece::<ZOBRIST_OPTION>(
-                BlackPawn,
-                Square::from(self.en_passant_file as u8 + 32),
-            ),
-            Color::Black => self.remove_piece::<ZOBRIST_OPTION>(
-                WhitePawn,
-                Square::from(self.en_passant_file as u8 + 24),
-            ),
+            _ => unreachable!(),
         }
     }
 
-    fn reverse_quiet(&mut self, played: MovePly) {
-        let to = played.to();
-        self.move_piece::<IGNORE_ZOBRIST>(self.piece_at(to), to, played.from())
-    }
+    #[inline(always)]
+    fn apply_en_passant<const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        played: &MovePly,
+    ) {
+        self.apply_quiet::<COLOR, ZOBRIST_OPTION>(played, BasePiece::Pawn);
 
-    fn reverse_short_castle(&mut self) {
-        match self.side_to_move {
-            Color::White => {
-                self.move_piece::<IGNORE_ZOBRIST>(WhiteKing, Square::G1, Square::E1);
-                self.move_piece::<IGNORE_ZOBRIST>(WhiteRook, Square::F1, Square::H1);
-            }
-            Color::Black => {
-                self.move_piece::<IGNORE_ZOBRIST>(BlackKing, Square::G8, Square::E8);
-                self.move_piece::<IGNORE_ZOBRIST>(BlackRook, Square::F8, Square::H8);
-            }
-        }
-    }
-    fn reverse_long_castle(&mut self) {
-        match self.side_to_move {
-            Color::White => {
-                self.move_piece::<IGNORE_ZOBRIST>(WhiteKing, Square::C1, Square::E1);
-                self.move_piece::<IGNORE_ZOBRIST>(WhiteRook, Square::D1, Square::A1);
-            }
-            Color::Black => {
-                self.move_piece::<IGNORE_ZOBRIST>(BlackKing, Square::C8, Square::E8);
-                self.move_piece::<IGNORE_ZOBRIST>(BlackRook, Square::D8, Square::A8);
-            }
+        match COLOR {
+            WHITE => self.remove_piece::<PAWN, BLACK, ZOBRIST_OPTION>(Square::from(
+                self.en_passant_file as u8 + 32,
+            )),
+            BLACK => self.remove_piece::<PAWN, WHITE, ZOBRIST_OPTION>(Square::from(
+                self.en_passant_file as u8 + 24,
+            )),
         }
     }
 
-    fn reverse_promotion(&mut self, played: MovePly) {
-        self.remove_piece::<IGNORE_ZOBRIST>(self.piece_at(played.to()), played.to());
-
-        let original_pawn = match self.side_to_move {
-            Color::White => WhitePawn,
-            Color::Black => BlackPawn,
-        };
-
-        self.add_piece::<IGNORE_ZOBRIST>(original_pawn, played.from());
-    }
-
-    fn reverse_en_passant(&mut self, played: MovePly) {
-        self.reverse_quiet(played);
-
-        match self.side_to_move {
-            Color::White => self.add_piece::<IGNORE_ZOBRIST>(
-                BlackPawn,
-                Square::from(self.en_passant_file as u8 + 32),
-            ),
-            Color::Black => self.add_piece::<IGNORE_ZOBRIST>(
-                WhitePawn,
-                Square::from(self.en_passant_file as u8 + 24),
-            ),
-        }
-    }
-
-    fn update_castling_rights(&mut self, from: Square, to: Square) {
+    #[inline(always)]
+    fn update_castling_rights<const ZOBRIST_OPTION: bool>(&mut self, from: Square, to: Square) {
         let previous_rights = self.castling_rights;
 
         self.castling_rights &= SQUARE_MOVED_CASTLING[from as usize];
         self.castling_rights &= SQUARE_MOVED_CASTLING[to as usize];
 
         if self.castling_rights == previous_rights {
+            return;
+        }
+
+        if ZOBRIST_OPTION != INCREMENT_ZOBRIST {
             return;
         }
 
@@ -529,86 +509,81 @@ impl Board {
     }
 
     #[inline(always)]
-    pub fn make_move<const ZOBRIST_OPTION: bool>(&mut self, played: &MovePly) {
+    pub fn make_move<const COLOR: bool, const ZOBRIST_OPTION: bool>(
+        &mut self,
+        played: &MovePly,
+        moving_piece: BasePiece,
+    ) {
         let from = played.from();
         let to = played.to();
-        let capture = self.piece_at(to);
-        let moving_piece = self.piece_at(from);
 
-        self.push_board_state(*played, capture);
-
-        if self.can_en_passant {
+        if ZOBRIST_OPTION == INCREMENT_ZOBRIST && self.can_en_passant {
             self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
         }
         self.can_en_passant = false;
 
-        if capture.is_piece() {
-            self.remove_piece::<ZOBRIST_OPTION>(capture, to);
+        let enemy_indicies = match COLOR {
+            WHITE => NUM_BASE_PIECES..NUM_PIECES,
+            BLACK => 0..NUM_BASE_PIECES,
+        };
+
+        let new_enemy_occupancy = self.occupancy_them_const::<COLOR>() & !to.mask();
+
+        for bitboard_index in enemy_indicies {
+            if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
+                if self.bitboards[bitboard_index] & to.mask() != 0 {
+                    self.bitboards[bitboard_index] ^= to.mask();
+                    self.zobrist ^= ZOBRIST.square_zobrist((bitboard_index as u8).into(), to);
+                    break;
+                }
+            } else {
+                self.bitboards[bitboard_index] &= new_enemy_occupancy;
+            }
         }
 
-        if moving_piece.is_pawn() || capture.is_piece() {
+        match COLOR {
+            WHITE => self.black_occupancy = new_enemy_occupancy,
+            BLACK => self.white_occupancy = new_enemy_occupancy,
+        }
+
+        let is_capture = self.occupancy_them_const::<COLOR>() & to.mask() != 0;
+        if ZOBRIST_OPTION == INCREMENT_ZOBRIST
+            && (matches!(moving_piece, BasePiece::Pawn) || is_capture)
+        {
             self.half_move_clock = 0;
         } else {
             self.half_move_clock += 1;
         }
 
-        self.update_castling_rights(from, to);
+        self.update_castling_rights::<ZOBRIST_OPTION>(from, to);
 
         match played.flag() {
-            MoveFlag::None => self.apply_quiet::<ZOBRIST_OPTION>(played),
-            MoveFlag::DoubleJump => self.apply_double_jump::<ZOBRIST_OPTION>(played),
-            MoveFlag::CastleShort => self.apply_short_castle::<ZOBRIST_OPTION>(),
-            MoveFlag::CastleLong => self.apply_long_castle::<ZOBRIST_OPTION>(),
-            MoveFlag::EnPassantCapture => self.apply_en_passant::<ZOBRIST_OPTION>(played),
-            _ => self.apply_promotion::<ZOBRIST_OPTION>(played),
+            MoveFlag::None => self.apply_quiet::<COLOR, ZOBRIST_OPTION>(played, moving_piece),
+            MoveFlag::DoubleJump => {
+                self.apply_double_jump::<COLOR, ZOBRIST_OPTION>(played, moving_piece)
+            }
+            MoveFlag::CastleShort => self.apply_short_castle::<COLOR, ZOBRIST_OPTION>(),
+            MoveFlag::CastleLong => self.apply_long_castle::<COLOR, ZOBRIST_OPTION>(),
+            MoveFlag::EnPassantCapture => self.apply_en_passant::<COLOR, ZOBRIST_OPTION>(played),
+            _ => self.apply_promotion::<COLOR, ZOBRIST_OPTION>(played),
         }
 
+        self.occupancy = self.white_occupancy | self.black_occupancy;
         self.side_to_move = !self.side_to_move;
 
-        if ZOBRIST_OPTION {
+        if ZOBRIST_OPTION == INCREMENT_ZOBRIST {
             self.zobrist ^= ZOBRIST.side_to_move();
         }
     }
 
-    #[inline(always)]
-    pub fn undo_move(&mut self) {
-        let last_board_state = self.board_states[self.cur_board_state - 1];
-        let last_played = last_board_state.played;
-
-        self.castling_rights = last_board_state.castling_rights;
-        self.en_passant_file = last_board_state.en_passant_file;
-        self.can_en_passant = last_board_state.can_en_passant;
-        self.half_move_clock = last_board_state.half_move_clock;
-        self.in_check = last_board_state.in_check;
-
-        self.side_to_move = !self.side_to_move;
-
-        match last_played.flag() {
-            MoveFlag::None => self.reverse_quiet(last_played),
-            MoveFlag::DoubleJump => self.reverse_quiet(last_played),
-            MoveFlag::CastleShort => self.reverse_short_castle(),
-            MoveFlag::CastleLong => self.reverse_long_castle(),
-            MoveFlag::EnPassantCapture => self.reverse_en_passant(last_played),
-            _ => self.reverse_promotion(last_played),
-        }
-
-        if last_board_state.captured.is_piece() && !last_played.flag().is_en_passant_capture() {
-            self.add_piece::<IGNORE_ZOBRIST>(last_board_state.captured, last_played.to());
-        }
-
-        self.cur_board_state -= 1;
-
-        self.zobrist = last_board_state.zobrist;
-    }
-
-    pub fn make_null_move(&mut self) {
+    /* pub fn make_null_move(&mut self) {
         self.push_board_state(MovePly::default(), NoPiece);
         self.zobrist ^= ZOBRIST.side_to_move();
         self.side_to_move = !self.side_to_move;
         self.can_en_passant = false;
-    }
+    } */
 
-    pub fn undo_null_move(&mut self) {
+    /* pub fn undo_null_move(&mut self) {
         let last_board_state = self.board_states[self.cur_board_state - 1];
 
         self.castling_rights = last_board_state.castling_rights;
@@ -620,7 +595,7 @@ impl Board {
 
         self.cur_board_state -= 1;
         self.side_to_move = !self.side_to_move;
-    }
+    } */
 }
 
 const TOP_SECTION: &str = "    ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐";

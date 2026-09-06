@@ -2,7 +2,7 @@ use crate::chess::consts::NUM_SQUARES;
 use crate::chess::types::square::Square;
 use crate::general::bits;
 use std::fmt::{Display, Formatter};
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
 #[derive(Copy, Clone)]
 pub struct Bitboard(pub u64);
@@ -51,6 +51,13 @@ impl BitAnd<u64> for Bitboard {
     }
 }
 
+impl BitXor<u64> for Bitboard {
+    type Output = u64;
+    fn bitxor(self, rhs: u64) -> u64 {
+        self.0 ^ rhs
+    }
+}
+
 impl Not for Bitboard {
     type Output = u64;
     fn not(self) -> u64 {
@@ -67,6 +74,12 @@ impl BitOrAssign<u64> for Bitboard {
 impl BitAndAssign<u64> for Bitboard {
     fn bitand_assign(&mut self, rhs: u64) {
         self.0 &= rhs
+    }
+}
+
+impl BitXorAssign<u64> for Bitboard {
+    fn bitxor_assign(&mut self, rhs: u64) {
+        self.0 ^= rhs
     }
 }
 

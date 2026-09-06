@@ -28,6 +28,7 @@ pub static KING_ATTACK_MASKS: LazyLock<KingAttackMasks> = LazyLock::new(|| KingA
 #[inline(always)]
 pub fn rook_lookup(square: Square, occupied: u64) -> u64 {
     let mask = ORTHOGONAL_LOOKUP.no_edge_masks[square as usize];
+
     let idx = unsafe { std::arch::x86_64::_pext_u64(occupied, mask) as usize };
     unsafe {
         *ORTHOGONAL_LOOKUP

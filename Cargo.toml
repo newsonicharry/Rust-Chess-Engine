@@ -1,7 +1,5 @@
 cargo-features = ["profile-rustflags"]
 
-# [toolchain]
-# channel = "nightly"
 
 [package]
 name = "ChessEngine"
@@ -11,16 +9,17 @@ edition = "2024"
 [dependencies]
 rand = "0.7.2"
 portable-atomic = { version = "1.0", features = ["fallback"] }
-cozy-chess = "0.3.4"
+# cozy-chess = "0.3.4"
 
 [profile.release]
 # debug = true
 opt-level = 3
-lto = "fat"
+# lto = "fat"
 # codegen-units = 1
 rustflags = [
     # "-C", "link-arg=-Wl,--stack,64000000",
-     "-C", "target-cpu=x86-64-v3"
+     # "-C", "target-cpu=x86-64-v3",
+     "-C", "target-cpu=native"
 ]
 
 

@@ -11,7 +11,7 @@ use crate::engine::arbiter::Arbiter;
 use crate::engine::capture_history::CaptureHeuristics;
 use crate::engine::counter_move_heuristics::CounterMoveHeuristics;
 use crate::engine::eval::nnue::NNUE;
-use crate::engine::search_funcs::{move_is_capture, see};
+use crate::engine::search_funcs::see;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
@@ -72,7 +72,7 @@ impl Searcher {
         mut alpha: i16,
         beta: i16,
     ) -> i16 {
-        if self.search_limits.is_hard_stop() {
+        /* if self.search_limits.is_hard_stop() {
             return 0;
         }
 
@@ -342,7 +342,9 @@ impl Searcher {
             self.tt.best_move_score.store(alpha, Ordering::Relaxed);
         }
 
-        alpha
+        alpha */
+
+        return 0;
     }
 
     fn in_zugzwang(board: &Board) -> bool {
@@ -355,7 +357,7 @@ impl Searcher {
     }
 
     fn quiescence_search(&mut self, ply: u8, depth: u8, mut alpha: i16, beta: i16) -> i16 {
-        if self.search_limits.is_hard_stop() {
+        /* if self.search_limits.is_hard_stop() {
             return 0;
         }
 
@@ -459,12 +461,14 @@ impl Searcher {
             ply,
         );
 
-        alpha
+        alpha */
+
+        return 0;
     }
 
     fn pv_from_transposition(&self) -> String {
-        let mut board_clone = self.board.clone();
         let mut pv_line = String::new();
+        /* let mut board_clone = self.board.clone();
 
         loop {
             if pv_line.chars().filter(|&cur_char| ' ' == cur_char).count() == 20 {
@@ -497,7 +501,7 @@ impl Searcher {
             } else {
                 break;
             }
-        }
+        } */
 
         pv_line
     }
@@ -600,11 +604,12 @@ impl Searcher {
                 }
             }
 
-            move_values[i] += self.capture_heuristics.get(
+            todo!();
+            /* move_values[i] += self.capture_heuristics.get(
                 cur_move.to(),
                 self.board.piece_at(cur_move.from()),
                 self.board.piece_at(cur_move.to()),
-            );
+            ); */
 
             // if *cur_move == counter_move {
             //     move_values[i] += 300;

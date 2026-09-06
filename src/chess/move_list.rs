@@ -1,5 +1,6 @@
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::move_flag::MoveFlag;
+use crate::chess::types::piece::BasePiece;
 use crate::chess::types::square::Square;
 use crate::general::bits;
 use std::cmp::Reverse;
@@ -14,6 +15,7 @@ pub struct PieceMoves {
     from_mask: u64,
     to_mask: u64,
     piece_move_info: u8,
+    pub piece_type: BasePiece,
 }
 
 impl PieceMoves {
@@ -22,14 +24,16 @@ impl PieceMoves {
             from_mask,
             to_mask,
             piece_move_info: IS_BULK | ((flag as u8) << FLAG_SHIFT),
+            piece_type: BasePiece::Pawn,
         }
     }
 
-    pub fn new(from: Square, to_mask: u64, flag: MoveFlag) -> PieceMoves {
+    pub fn new(from: Square, to_mask: u64, flag: MoveFlag, piece_type: BasePiece) -> PieceMoves {
         PieceMoves {
             from_mask: from.mask(),
             to_mask,
             piece_move_info: ((flag as u8) << FLAG_SHIFT),
+            piece_type,
         }
     }
 
@@ -40,6 +44,7 @@ impl PieceMoves {
             piece_move_info: IS_BULK
                 | IS_PROMOTION
                 | ((MoveFlag::PromoteToKnight as u8) << FLAG_SHIFT),
+            piece_type: BasePiece::Pawn,
         }
     }
 

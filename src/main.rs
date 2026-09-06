@@ -1,11 +1,12 @@
-
 use crate::chess::board::Board;
-use crate::chess::move_generator::MoveGenerator;
+use crate::chess::move_generator::{BLACK, MoveGenerator, WHITE};
 use crate::chess::move_generator::{GEN_ALL, NOT_LEAF};
 use crate::chess::move_list::MoveList;
 use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
+use crate::chess::types::piece::BasePiece;
+use crate::chess::types::square::Square;
 use crate::engine::arbiter::Arbiter;
 use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT, perft};
 use crate::engine::search::Searcher;
@@ -45,7 +46,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
         match args[1].as_str() {
-            "pgo-chess" => run_self_play(),
+            // "pgo-chess" => run_self_play(),
             "pgo-perft" => run_perft_pgo(),
             _ => {
                 println!(
@@ -111,7 +112,14 @@ fn main() {
                 board.new(&current_fen);
                 if let Some(str_moves) = moves {
                     for str_move in str_moves {
-                        board.make_move::<true>(&move_ply::uci_move_parser(&str_move, &board))
+                        /* match board.side_to_move() {
+                            Color::White => board.make_move::<WHITE, true>(
+                                &move_ply::uci_move_parser(&str_move, &board),
+                            ),
+                            Color::Black => board.make_move::<BLACK, true>(
+                                &move_ply::uci_move_parser(&str_move, &board),
+                            ),
+                        } */
                     }
                 }
             }
@@ -201,6 +209,7 @@ fn main() {
         cozy_board: cozy_chess::Board,
         depth: u8,
         mut num_nodes: u64,
+        moves_made: &mut Vec<MovePly>,
     ) -> u64 {
         let mut cozy_move_list = Vec::new();
         cozy_board.generate_moves(|moves| {
@@ -209,7 +218,7 @@ fn main() {
         });
 
         let mut move_list = MoveList::default();
-        MoveGenerator::<GEN_ALL>::generate(my_board, &mut |mut piece_moves| {
+        MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(my_board, &mut |mut piece_moves| {
             move_list.add_piece_moves(&mut piece_moves);
         });
 
@@ -217,9 +226,12 @@ fn main() {
             println!("{cozy_board}");
             println!("{my_board}");
 
-            for past_state in my_board.past_board_states().unwrap() {
-                println!("Played: {}", past_state.played);
+            for curr_move in moves_made {
+                println!("Played: {curr_move}");
             }
+            // for past_state in my_board.past_board_states().unwrap() {
+            // println!("Played: {}", past_state.played);
+            // }
             println!(
                 "mine {} it {}",
                 move_list.move_count(),
@@ -257,25 +269,32 @@ fn main() {
                 }
             }
 
-            my_board.make_move(curr_move);
-            cozy_board.play_unchecked(move_as_str.parse().unwrap());
-            let search_nodes = perft(my_board, cozy_board.clone(), depth - 1, 0);
+            let mut new_board = *my_board;
 
+            let moving_piece: BasePiece = new_board.piece_at(curr_move.from()).into();
+            match new_board.side_to_move() {
+                Color::White => new_board.make_move::<WHITE, true>(curr_move, moving_piece),
+                Color::Black => new_board.make_move::<BLACK, true>(curr_move, moving_piece),
+            };
+            cozy_board.play_unchecked(move_as_str.parse().unwrap());
+            moves_made.push(*curr_move);
+            let search_nodes = perft(&mut new_board, cozy_board.clone(), depth - 1, 0, moves_made);
+            moves_made.pop();
             num_nodes += search_nodes;
-            my_board.undo_move();
+            // my_board.undo_move();
         }
 
         num_nodes
     }
 
-    let position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+    // let position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
     // let position = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
-    // let position = START_POS;
+    let position = START_POS;
     let mut my_board = Board::default();
     my_board.new(position);
     let cozy_board = cozy_chess::Board::from_fen(position, false).unwrap();
 
-    perft(&mut my_board, cozy_board, 5, 0);
+    perft(&mut my_board, cozy_board, 4, 0, &mut vec![]);
 } */
 
 /* fn cozy_perft_bulk(depth: u8) {
@@ -321,10 +340,12 @@ pub fn run_perft_pgo() {
     let mut board = Board::default();
     const PERFT_TYPE: u8 = BULK_PERFT;
 
-    board.new("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    perft::<PERFT_TYPE>(&mut board, 7);
+    for _ in 0..1 {
+        board.new("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        perft::<PERFT_TYPE>(&mut board, 8);
+    }
 
-    board = Board::default();
+    /* board = Board::default();
     board.new("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
     perft::<PERFT_TYPE>(&mut board, 6);
 
@@ -342,10 +363,10 @@ pub fn run_perft_pgo() {
 
     board = Board::default();
     board.new("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
-    perft::<PERFT_TYPE>(&mut board, 6);
+    perft::<PERFT_TYPE>(&mut board, 6); */
 }
 
-pub fn run_self_play() {
+/* pub fn run_self_play() {
     use std::sync::atomic::Ordering;
 
     let mut fen_file = File::open(
@@ -370,7 +391,11 @@ pub fn run_self_play() {
             board.new(fen);
 
             for uci_move in &uci_moves_played {
-                board.make_move::<true>(uci_move);
+                match board.side_to_move() {
+                    Color::White => board.make_move::<WHITE, true>(uci_move),
+                    Color::Black => board.make_move::<BLACK, true>(uci_move),
+                }
+                // board.make_move::<true>(uci_move);
             }
 
             // println!("{board}");
@@ -398,4 +423,4 @@ pub fn run_self_play() {
             tt.age();
         }
     }
-}
+} */

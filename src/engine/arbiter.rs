@@ -61,7 +61,8 @@ impl Arbiter {
     }
 
     fn is_three_fold(board: &Board) -> bool {
-        if board.half_move_clock() == 0 {
+        todo!()
+        /* if board.half_move_clock() == 0 {
             return false;
         }
 
@@ -81,6 +82,6 @@ impl Arbiter {
                 }
             }
         }
-        false
+        false */
     }
 }

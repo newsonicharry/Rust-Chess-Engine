@@ -102,12 +102,14 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         return count as u64;
     }
 
-    fn pop_lsb(b: &mut u64) -> u32 {
-        let index = b.trailing_zeros();
-        *b &= *b - 1;
+    // #[inline(always)]
+    fn pop_lsb(num: &mut u64) -> u32 {
+        let index = num.trailing_zeros();
+        *num &= *num - 1;
         index
     }
 
+    #[inline(always)]
     fn get_attacks(
         side_to_move: Color,
         square: Square,
@@ -201,11 +203,17 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         let pawn_checks = MOVEMENT_MASKS.pawn_attacks_const::<COLOR>(king_square)
             & board.bitboard(Pawn, (!COLOR).into());
 
-        let regular_check: u64 = knight_checks | pawn_checks;
-        let orthogonal_check: u64 = rook_lookup(king_square, board.occupancy()) & enemy_orthogonal;
-        let diagonal_check: u64 = bishop_lookup(king_square, board.occupancy()) & enemy_diagonal;
+        let mut all_checks: u64 = knight_checks | pawn_checks;
 
-        let all_checks = orthogonal_check | diagonal_check | regular_check;
+        // dont do a lookup if a check isnt possible
+        if MOVEMENT_MASKS.rook[king_square as usize] & enemy_orthogonal != 0 {
+            all_checks |= rook_lookup(king_square, board.occupancy()) & enemy_orthogonal;
+        }
+
+        if MOVEMENT_MASKS.bishop[king_square as usize] & enemy_diagonal != 0 {
+            all_checks |= bishop_lookup(king_square, board.occupancy()) & enemy_diagonal;
+        }
+
         let mut allowed_squares: u64 = 0;
 
         if bits::count(all_checks) == 1 {
@@ -214,9 +222,8 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                 IN_BETWEEN.in_between[king_square as usize][index as usize] | (1 << index)
         }
 
-        // there are no blockable squares (they are all valid so all on)
         if all_checks == 0 {
-            allowed_squares = !allowed_squares;
+            allowed_squares = u64::MAX;
         }
 
         (all_checks, allowed_squares)
@@ -228,9 +235,10 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         from: Square,
         to_mask: u64,
         flag: MoveFlag,
+        piece_type: BasePiece,
         move_iter: &mut impl FnMut(PieceMoves),
     ) {
-        move_iter(PieceMoves::new(from, to_mask, flag))
+        move_iter(PieceMoves::new(from, to_mask, flag, piece_type))
     }
 
     fn iter_bulk_white(
@@ -468,6 +476,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                         Square::from(bits::next(right_pawn_position)),
                         en_passant_attack_mask,
                         MoveFlag::EnPassantCapture,
+                        BasePiece::Pawn,
                         move_iter,
                     );
                 }
@@ -477,6 +486,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                         Square::from(bits::next(left_pawn_position)),
                         en_passant_attack_mask,
                         MoveFlag::EnPassantCapture,
+                        BasePiece::Pawn,
                         move_iter,
                     );
                 }
@@ -517,6 +527,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                         Square::from(bits::next(right_pawn_position)),
                         en_passant_attack_mask,
                         MoveFlag::EnPassantCapture,
+                        BasePiece::Pawn,
                         move_iter,
                     );
                 }
@@ -526,6 +537,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                         Square::from(bits::next(left_pawn_position)),
                         en_passant_attack_mask,
                         MoveFlag::EnPassantCapture,
+                        BasePiece::Pawn,
                         move_iter,
                     );
                 }
@@ -567,7 +579,13 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             if IS_LEAF {
                 count += knight_moves.count_ones();
             } else {
-                Self::iter_single(square, knight_moves, MoveFlag::None, move_iter);
+                Self::iter_single(
+                    square,
+                    knight_moves,
+                    MoveFlag::None,
+                    BasePiece::Knight,
+                    move_iter,
+                );
             }
         }
 
@@ -603,7 +621,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             if IS_LEAF {
                 count += slider_moves.count_ones();
             } else {
-                Self::iter_single(square, slider_moves, MoveFlag::None, move_iter);
+                Self::iter_single(square, slider_moves, MoveFlag::None, slider_type, move_iter);
             }
         }
 
@@ -652,7 +670,13 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
 
         if GENERATOR_TYPE == GEN_TACTICS {
             valid_moves &= board.occupancy_them_const::<COLOR>();
-            Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
+            Self::iter_single(
+                king_square,
+                valid_moves,
+                MoveFlag::None,
+                BasePiece::King,
+                move_iter,
+            );
             return 0;
         }
 
@@ -660,7 +684,13 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         if IS_LEAF {
             count += valid_moves.count_ones();
         } else {
-            Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
+            Self::iter_single(
+                king_square,
+                valid_moves,
+                MoveFlag::None,
+                BasePiece::King,
+                move_iter,
+            );
         }
 
         if potental_short_castle && (short_castle_not_occupied & attack_squares == 0) {
@@ -676,6 +706,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     king_square,
                     move_to_square.mask(),
                     MoveFlag::CastleShort,
+                    BasePiece::King,
                     move_iter,
                 );
             }
@@ -698,6 +729,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
                     king_square,
                     move_to_square.mask(),
                     MoveFlag::CastleLong,
+                    BasePiece::King,
                     move_iter,
                 );
             }

@@ -49,13 +49,16 @@ impl Zobrist {
     }
 
     pub fn hash_from_board(&self, board: &Board) -> u64 {
+        return 0;
+        // todo!();
+
         let mut final_zobrist: u64 = 0;
 
-        let squares_with_pieces = bits::all_squares(board.occupancy());
+        /* let squares_with_pieces = bits::all_squares(board.occupancy());
         for square in squares_with_pieces {
             let piece = board.piece_at(square);
             final_zobrist ^= self.squares[piece as usize][square as usize];
-        }
+        } */
 
         if board.has_short_castle_rights(White) {
             final_zobrist ^= self.castling_rights[WHITE_SHORT_CASTLE];

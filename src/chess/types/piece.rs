@@ -33,6 +33,11 @@ impl From<(BasePiece, Color)> for Piece {
     }
 }
 
+impl From<u8> for Piece {
+    fn from(raw_value: u8) -> Self {
+        unsafe { mem::transmute(raw_value) }
+    }
+}
 pub fn basepiece_to_piece<const COLOR: bool>(base_piece: BasePiece) -> Piece {
     Piece::from((base_piece, COLOR.into()))
 }
@@ -126,6 +131,13 @@ impl Piece {
         Color::White
     }
 }
+
+pub const PAWN: u8 = 0;
+pub const KNIGHT: u8 = 1;
+pub const BISHOP: u8 = 2;
+pub const ROOK: u8 = 3;
+pub const QUEEN: u8 = 4;
+pub const KING: u8 = 5;
 
 #[derive(Copy, Clone, PartialEq)]
 #[repr(u8)]

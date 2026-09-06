@@ -6,7 +6,7 @@ use crate::chess::types::rank::Rank;
 use crate::chess::types::square::Square;
 use crate::general::bits;
 use crate::precomputed::generators::helpers::{NO_EDGE, create_dynamic_mask, generate_blockers};
-use rand::Rng;
+// use rand::Rng;
 use std::collections::HashSet;
 
 enum SliderType {
@@ -141,7 +141,7 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
     }
 
     // unused as pext is the default, may be used in the future for platforms that don't support bmi2
-    #[allow(dead_code)]
+    /* #[allow(dead_code)]
     fn find_magic_and_shift(&self, square: Square) -> (u64, u8) {
         let no_edge_mask = self.no_edge_masks[square as usize];
 
@@ -175,5 +175,5 @@ impl<const NUM_ENTRIES: usize> SliderLookup<NUM_ENTRIES> {
         }
 
         (final_magic, 64 - num_blockers)
-    }
+    } */
 }

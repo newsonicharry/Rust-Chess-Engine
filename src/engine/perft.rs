@@ -1,10 +1,7 @@
-// #![allow(incomplete_features)]
-
-use crate::chess::board::Board;
+use crate::chess::board::{Board, INCREMENT_ZOBRIST, NO_ZOBRIST};
 use crate::chess::move_generator::{BLACK, GEN_ALL, WHITE};
 use crate::chess::move_generator::{IS_LEAF, MoveGenerator, NOT_LEAF};
 use crate::chess::move_list::MoveList;
-use crate::chess::types::color::Color;
 use std::time::Instant;
 
 struct PerftTT {
@@ -53,32 +50,49 @@ impl PerftTT {
 pub const PERFT: u8 = 0;
 pub const BULK_PERFT: u8 = 1;
 pub const TT_PERFT: u8 = 2;
+const NO_DISPLAY: bool = false;
 
 macro_rules! generate_depth {
-    ($name:tt, $calls:tt, $color:ident) => {
+    ($name:tt, $calls:tt, $color:ident, $depth:expr) => {
         #[inline(always)]
         fn $name<const PERFT_TYPE: u8, const DISPLAY: bool>(
             board: *mut Board,
             mut num_nodes: u64,
+            tt: &mut PerftTT,
         ) -> u64 {
+            if PERFT_TYPE == TT_PERFT {
+                let zobrist = unsafe { (*board).zobrist() };
+                if let Some(nodes) = tt.probe(zobrist, $depth) {
+                    return nodes;
+                }
+            }
+
             MoveGenerator::<GEN_ALL>::const_generate::<$color, NOT_LEAF>(
                 board,
                 &mut |piece_moves| {
                     for curr_move in piece_moves {
-                        unsafe {
-                            (*board).make_move::<false>(&curr_move);
+                        let mut new_board = unsafe { *board };
+
+                        match PERFT_TYPE {
+                            TT_PERFT => new_board.make_move::<$color, INCREMENT_ZOBRIST>(
+                                &curr_move,
+                                piece_moves.piece_type,
+                            ),
+                            _ => new_board.make_move::<$color, NO_ZOBRIST>(
+                                &curr_move,
+                                piece_moves.piece_type,
+                            ),
                         }
 
-                        let curr_nodes = $calls::<PERFT_TYPE, false>(board, 0);
+                        let curr_nodes = $calls::<PERFT_TYPE, NO_DISPLAY>(&mut new_board, 0, tt);
+                        num_nodes += curr_nodes;
+
+                        if PERFT_TYPE == TT_PERFT {
+                            tt.update(new_board.zobrist(), curr_nodes, $depth - 1);
+                        }
 
                         if DISPLAY {
                             println!("{curr_move}: {curr_nodes}");
-                        }
-
-                        num_nodes += curr_nodes;
-
-                        unsafe {
-                            (*board).undo_move();
                         }
                     }
                 },
@@ -90,61 +104,92 @@ macro_rules! generate_depth {
 }
 
 macro_rules! generate_specific_depth {
-    ($white_name:tt, $white_calls:tt, $black_name:tt, $black_calls:tt) => {
-        generate_depth!($white_name, $white_calls, WHITE);
-        generate_depth!($black_name, $black_calls, BLACK);
+    ($white_name:tt, $white_calls:tt, $black_name:tt, $black_calls:tt, $depth:expr) => {
+        generate_depth!($white_name, $white_calls, WHITE, $depth);
+        generate_depth!($black_name, $black_calls, BLACK, $depth);
     };
 }
 
 #[inline(always)]
 fn search_w_1<const PERFT_TYPE: u8, const DISPLAY: bool>(
     board: *mut Board,
-    _num_nodes: u64,
+    num_nodes: u64,
+    tt: &mut PerftTT,
 ) -> u64 {
-    return MoveGenerator::<GEN_ALL>::const_generate::<WHITE, IS_LEAF>(board, &mut |_| {});
+    if PERFT_TYPE == BULK_PERFT || PERFT_TYPE == TT_PERFT {
+        return MoveGenerator::<GEN_ALL>::const_generate::<WHITE, IS_LEAF>(board, &mut |_| {});
+    }
+    return search::<WHITE, PERFT_TYPE, NO_DISPLAY>(board, 1, num_nodes, tt);
 }
 
 #[inline(always)]
 fn search_b_1<const PERFT_TYPE: u8, const DISPLAY: bool>(
     board: *mut Board,
-    _num_nodes: u64,
+    num_nodes: u64,
+    tt: &mut PerftTT,
 ) -> u64 {
-    return MoveGenerator::<GEN_ALL>::const_generate::<BLACK, IS_LEAF>(board, &mut |_| {});
+    if PERFT_TYPE == BULK_PERFT || PERFT_TYPE == TT_PERFT {
+        return MoveGenerator::<GEN_ALL>::const_generate::<BLACK, IS_LEAF>(board, &mut |_| {});
+    }
+    return search::<BLACK, PERFT_TYPE, NO_DISPLAY>(board, 1, num_nodes, tt);
 }
 
-generate_specific_depth!(search_w_2, search_b_1, search_b_2, search_w_1);
-generate_specific_depth!(search_w_3, search_b_2, search_b_3, search_w_2);
-generate_specific_depth!(search_w_4, search_b_3, search_b_4, search_w_3);
+generate_specific_depth!(search_w_2, search_b_1, search_b_2, search_w_1, 2);
+generate_specific_depth!(search_w_3, search_b_2, search_b_3, search_w_2, 3);
+generate_specific_depth!(search_w_4, search_b_3, search_b_4, search_w_3, 4);
+generate_specific_depth!(search_w_5, search_b_4, search_b_5, search_w_4, 5);
+generate_specific_depth!(search_w_6, search_b_5, search_b_6, search_w_5, 6);
+generate_specific_depth!(search_w_7, search_b_6, search_b_7, search_w_6, 7);
 
-fn search<const PERFT_TYPE: u8, const DISPLAY: bool>(
+#[inline(always)]
+fn search<const COLOR: bool, const PERFT_TYPE: u8, const DISPLAY: bool>(
     board: *mut Board,
     depth: u8,
     mut num_nodes: u64,
+    tt: &mut PerftTT,
 ) -> u64 {
-    if depth == 4 {
-        return match unsafe { (*board).side_to_move() } {
-            Color::White => search_w_4::<PERFT_TYPE, false>(board, num_nodes),
-            Color::Black => search_b_4::<PERFT_TYPE, false>(board, num_nodes),
+    if PERFT_TYPE == TT_PERFT {
+        let zobrist = unsafe { (*board).zobrist() };
+        if let Some(nodes) = tt.probe(zobrist, depth) {
+            return nodes;
+        }
+    }
+
+    if depth == 7 {
+        return match COLOR {
+            WHITE => search_w_7::<PERFT_TYPE, NO_DISPLAY>(board, num_nodes, tt),
+            BLACK => search_b_7::<PERFT_TYPE, NO_DISPLAY>(board, num_nodes, tt),
         };
+    }
+
+    if PERFT_TYPE == PERFT && depth == 0 {
+        return 1;
     }
 
     MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(board, &mut |piece_moves| {
         for curr_move in piece_moves {
-            unsafe {
-                (*board).make_move::<false>(&curr_move);
+            let mut new_board = unsafe { *board };
+
+            match PERFT_TYPE {
+                TT_PERFT => new_board
+                    .make_move::<COLOR, INCREMENT_ZOBRIST>(&curr_move, piece_moves.piece_type),
+                _ => new_board.make_move::<COLOR, NO_ZOBRIST>(&curr_move, piece_moves.piece_type),
             }
 
-            let curr_nodes = search::<PERFT_TYPE, false>(board, depth - 1, 0);
+            let curr_nodes = match COLOR {
+                WHITE => search::<BLACK, PERFT_TYPE, NO_DISPLAY>(&mut new_board, depth - 1, 0, tt),
+                BLACK => search::<WHITE, PERFT_TYPE, NO_DISPLAY>(&mut new_board, depth - 1, 0, tt),
+            };
+
+            if PERFT_TYPE == TT_PERFT {
+                tt.update(new_board.zobrist(), curr_nodes, depth - 1);
+            }
 
             if DISPLAY {
                 println!("{curr_move}: {curr_nodes}");
             }
 
             num_nodes += curr_nodes;
-
-            unsafe {
-                (*board).undo_move();
-            }
         }
     });
 
@@ -152,7 +197,7 @@ fn search<const PERFT_TYPE: u8, const DISPLAY: bool>(
 }
 
 pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
-    let mut transposition = PerftTT::new(128);
+    let mut tt = PerftTT::new(8);
 
     let mut start_pos_moves = MoveList::default();
     MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(board, &mut |mut piece_moves| {
@@ -162,16 +207,23 @@ pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
     let timer = Instant::now();
 
     let all_nodes = match (depth, board.side_to_move().is_white()) {
-        (1, WHITE) => search_w_1::<BULK_PERFT, true>(board, 0),
-        (1, BLACK) => search_b_1::<BULK_PERFT, true>(board, 0),
-        (2, WHITE) => search_w_2::<BULK_PERFT, true>(board, 0),
-        (2, BLACK) => search_b_2::<BULK_PERFT, true>(board, 0),
-        (3, WHITE) => search_w_3::<BULK_PERFT, true>(board, 0),
-        (3, BLACK) => search_b_3::<BULK_PERFT, true>(board, 0),
-        (4, WHITE) => search_w_4::<BULK_PERFT, true>(board, 0),
-        (4, BLACK) => search_b_4::<BULK_PERFT, true>(board, 0),
+        (1, WHITE) => search_w_1::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (1, BLACK) => search_b_1::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (2, WHITE) => search_w_2::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (2, BLACK) => search_b_2::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (3, WHITE) => search_w_3::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (3, BLACK) => search_b_3::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (4, WHITE) => search_w_4::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (4, BLACK) => search_b_4::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (5, WHITE) => search_w_5::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (5, BLACK) => search_b_5::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (6, WHITE) => search_w_6::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (6, BLACK) => search_b_6::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (7, WHITE) => search_w_7::<PERFT_TYPE, true>(board, 0, &mut tt),
+        (7, BLACK) => search_b_7::<PERFT_TYPE, true>(board, 0, &mut tt),
 
-        _ => search::<PERFT_TYPE, true>(board, depth, 0),
+        (_, WHITE) => search::<WHITE, PERFT_TYPE, true>(board, depth, 0, &mut tt),
+        (_, BLACK) => search::<BLACK, PERFT_TYPE, true>(board, depth, 0, &mut tt),
     };
 
     let nodes_per_second = all_nodes as f64 / (timer.elapsed().as_secs_f64());
