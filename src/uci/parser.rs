@@ -22,14 +22,14 @@ impl UCIParser {
         let mut final_str = String::new();
 
         for i in start_index..split_messages.len() {
-            let section = (*split_messages.get(i).unwrap()).to_owned() + " ";
+            let mut section = (*split_messages.get(i).unwrap()).to_owned();
 
             if let Some(break_point) = break_point {
                 if section == break_point {
                     break;
                 }
             }
-
+            section.push(' ');
             final_str.push_str(&*section);
         }
 
@@ -57,8 +57,6 @@ impl UCIParser {
 
         let option_name_wrapped =
             Self::collect_until_end_or_breakpoint(2, &split_message, Some("value"));
-
-        println!("{:?}", option_name_wrapped);
 
         if option_name_wrapped.is_err() {
             println!("Command setoption did not include the value for name");

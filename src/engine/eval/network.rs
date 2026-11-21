@@ -3,6 +3,12 @@ use std::mem;
 pub const NUM_FEATURES: usize = 768;
 pub const HIDDEN_SIZE: usize = 768;
 
+// pub const L1: usize = 16;
+// pub const L2: usize = 32;
+
+// pub const OUTPUT_BUCKETS: usize = 8;
+// pub const INPUT_BUCKETS: usize = 10;
+
 pub const CR_MIN: i32 = 0;
 pub const CR_MAX: i32 = 255;
 
@@ -12,11 +18,30 @@ pub const QAB: i32 = 255 * 64;
 pub const EVAL_SCALE: i32 = 400;
 
 #[repr(C)]
+// #[repr(align(64))]
 pub struct Network {
-    pub feature_weights: [i16; NUM_FEATURES * HIDDEN_SIZE],
-    pub feature_biases: [i16; HIDDEN_SIZE],
-    pub output_weights: [i16; HIDDEN_SIZE * 2],
-    pub output_bias: i16,
+    pub l0w: [i16; NUM_FEATURES * HIDDEN_SIZE],
+    pub l0b: [i16; HIDDEN_SIZE],
+    pub l1w: [i16; HIDDEN_SIZE * 2],
+    pub l1b: i16,
+    // pub l0w: [[i16; NUM_FEATURES * HIDDEN_SIZE]; INPUT_BUCKETS],
+    // pub l0b: [i16; HIDDEN_SIZE],
+
+    // pub l1w: [[i8; HIDDEN_SIZE * L1]; OUTPUT_BUCKETS],
+    // pub l1b: [[f32; L1]; OUTPUT_BUCKETS],
+
+    // pub l2w: [[f32; L2 * L1]; OUTPUT_BUCKETS],
+    // pub l2b: [[f32; L2]; OUTPUT_BUCKETS],
+
+    // pub l3w: [[f32; L2]; OUTPUT_BUCKETS],
+    // pub l3b: [f32; OUTPUT_BUCKETS],
 }
 
 pub static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./bins/quantised_768.bin")) };
+
+// ignore this, I got bored
+// pub static MODEL: Network = unsafe {
+//     mem::transmute(*include_bytes!(
+//         "/home/harry-phillips-desktop/Downloads/bullet/checkpoints/4_multi_layer-8/quantised.bin"
+//     ))
+// };

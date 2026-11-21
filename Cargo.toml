@@ -16,11 +16,13 @@ cozy-chess = "0.3.4"
 [profile.release]
 # debug = true
 opt-level = 3
-lto = "fat"
+lto = "thin"
+target-cpu = "native"
+
 # codegen-units = 1
-rustflags = [
+# rustflags = [
     # "-C", "link-arg=-Wl,--stack,64000000",
-     "-C", "target-cpu=x86-64-v3"
-]
+     # "-C", "target-cpu=x86-64-v3"
+# ]
 
 

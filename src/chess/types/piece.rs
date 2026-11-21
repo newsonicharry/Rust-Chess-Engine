@@ -136,6 +136,7 @@ pub enum BasePiece {
     Rook,
     Queen,
     King,
+    NoPiece,
 }
 
 const BASE_PIECES: [BasePiece; 6] = [
@@ -181,6 +182,7 @@ impl Display for BasePiece {
             BasePiece::Rook => 'R',
             BasePiece::Queen => 'Q',
             BasePiece::King => 'K',
+            BasePiece::NoPiece => ' ',
         };
 
         write!(f, "{}", char)

@@ -97,12 +97,15 @@ impl Board {
                 }
 
                 let cur_square = Square::from((cur_file, rank));
-                cur_file.plus();
+                if cur_file != File::H {
+                    cur_file.plus();
+                }
                 let piece = char_to_piece(char).unwrap();
 
                 self.add_piece::<IGNORE_ZOBRIST>(piece, cur_square);
             }
         }
+
         let side_to_move_str = split_fen.get(1).unwrap();
         if side_to_move_str.contains("b") {
             self.side_to_move = Color::Black;
@@ -203,6 +206,13 @@ impl Board {
         match COLOR {
             WHITE => self.king_square(Color::White),
             BLACK => self.king_square(Color::Black),
+        }
+    }
+
+    pub fn enemy_king_square_const<const COLOR: bool>(&self) -> Square {
+        match COLOR {
+            BLACK => self.king_square(Color::White),
+            WHITE => self.king_square(Color::Black),
         }
     }
 
@@ -605,7 +615,10 @@ impl Board {
         self.push_board_state(MovePly::default(), NoPiece);
         self.zobrist ^= ZOBRIST.side_to_move();
         self.side_to_move = !self.side_to_move;
-        self.can_en_passant = false;
+        if self.can_en_passant {
+            self.zobrist ^= ZOBRIST.pawn_jump(self.en_passant_file);
+            self.can_en_passant = false;
+        }
     }
 
     pub fn undo_null_move(&mut self) {

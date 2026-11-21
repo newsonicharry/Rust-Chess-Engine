@@ -1,7 +1,6 @@
 pub mod arbiter;
-mod capture_history;
-mod counter_move_heuristics;
 pub mod eval;
+mod heuristics;
 mod info;
 pub mod perft;
 pub mod search;

@@ -1,4 +1,3 @@
-
 use crate::chess::board::Board;
 use crate::chess::move_generator::MoveGenerator;
 use crate::chess::move_generator::{GEN_ALL, NOT_LEAF};
@@ -65,7 +64,11 @@ fn main() {
 
     board.new(&current_fen);
 
-    let mut tt_size = 64;
+    // let mut nnue = NNUE::new(board);
+    // println!("{}", nnue.evaluate(Color::White));
+    // exit(0);
+
+    let mut tt_size = 16;
     let mut tt = Arc::new(Transposition::new(tt_size));
 
     let mut num_threads = 1;
@@ -159,7 +162,7 @@ fn main() {
                     soft_think_time = (hard_think_time as f64 * 0.6f64) as u32;
                 }
 
-                let search_limits = SearchLimits::new(hard_think_time, soft_think_time);
+                let search_limits = SearchLimits::new(soft_think_time, hard_think_time);
 
                 Searcher::search_start(&tt, &board, &search_limits, num_threads);
             }
@@ -348,10 +351,8 @@ pub fn run_perft_pgo() {
 pub fn run_self_play() {
     use std::sync::atomic::Ordering;
 
-    let mut fen_file = File::open(
-        "/home/harry-phillips/Desktop/antidraw_v2.1/AntiDraw_V2.1/UHO_2022/UHO_2022_+110_+119/UHO_2022_8mvs_+110_+119.epd",
-    )
-    .unwrap();
+    let mut fen_file =
+        File::open("/home/harry-phillips-desktop/Desktop/UHO_2022_8mvs_+110_+119.epd").unwrap();
     let mut string = String::new();
     fen_file.read_to_string(&mut string).unwrap();
     let all_fens = string.split("\n").collect::<Vec<&str>>();
@@ -362,7 +363,7 @@ pub fn run_self_play() {
         let mut uci_moves_played: Vec<MovePly> = Vec::new();
 
         for i in 0.. {
-            if i > 30 {
+            if i > 90 {
                 return;
             }
 
@@ -397,5 +398,6 @@ pub fn run_self_play() {
             tt.curr_depth.store(0, Ordering::Relaxed);
             tt.age();
         }
+        break;
     }
 }

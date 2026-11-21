@@ -12,8 +12,8 @@ pub struct Accumulator {
 impl Default for Accumulator {
     fn default() -> Self {
         Self {
-            white: MODEL.feature_biases,
-            black: MODEL.feature_biases,
+            white: MODEL.l0b,
+            black: MODEL.l0b,
         }
     }
 }
@@ -38,16 +38,16 @@ impl Accumulator {
         let (white_idx, black_idx) = Self::nnue_index(piece, square);
 
         for i in 0..HIDDEN_SIZE {
-            self.white[i] -= MODEL.feature_weights[i + white_idx];
-            self.black[i] -= MODEL.feature_weights[i + black_idx];
+            self.white[i] -= MODEL.l0w[i + white_idx];
+            self.black[i] -= MODEL.l0w[i + black_idx];
         }
     }
     pub fn add_piece(&mut self, piece: Piece, square: Square) {
         let (white_idx, black_idx) = Self::nnue_index(piece, square);
 
         for i in 0..HIDDEN_SIZE {
-            self.white[i] += MODEL.feature_weights[i + white_idx];
-            self.black[i] += MODEL.feature_weights[i + black_idx];
+            self.white[i] += MODEL.l0w[i + white_idx];
+            self.black[i] += MODEL.l0w[i + black_idx];
         }
     }
 

@@ -121,10 +121,24 @@ impl NNUE {
         self.cur_accumulator -= 1;
     }
 
-    fn squared_crelu(value: i16) -> i32 {
-        (value as i32).clamp(CR_MIN, CR_MAX).pow(2)
+    fn crelu(value: i16) -> i32 {
+        (value as i32).clamp(CR_MIN, CR_MAX)
     }
-    pub fn evaluate(&self, side_to_move: Color) -> i16 {
+
+    fn squared_crelu(value: i16) -> i32 {
+        Self::crelu(value).pow(2)
+    }
+
+    // fn propagate_l2(&mut self) {
+    //     self.l1 = MODEL.l1b[0];
+
+    //     let white_accumulator = &self.accumulator_stack[self.cur_accumulator].white;
+    //     for (i, (&value, &weight)) in white_accumulator.iter().zip(&MODEL.l1w).enumerate() {
+    //         out += Self::squared_crelu(value) * weight as i32;
+    //     }
+    // }
+
+    pub fn evaluate(&mut self, side_to_move: Color) -> i16 {
         let white_accumulator = &self.accumulator_stack[self.cur_accumulator].white;
         let black_accumulator = &self.accumulator_stack[self.cur_accumulator].black;
 
@@ -134,13 +148,13 @@ impl NNUE {
         };
 
         let mut out = 0;
-        for (&value, &weight) in us.zip(&MODEL.output_weights) {
+        for (&value, &weight) in us.zip(&MODEL.l1w) {
             out += Self::squared_crelu(value) * weight as i32;
         }
-        for (&value, &weight) in them.zip(&MODEL.output_weights[HIDDEN_SIZE..]) {
+        for (&value, &weight) in them.zip(&MODEL.l1w[HIDDEN_SIZE..]) {
             out += Self::squared_crelu(value) * weight as i32;
         }
 
-        ((out / QA + MODEL.output_bias as i32) * EVAL_SCALE / QAB) as i16
+        ((out / QA + MODEL.l1b as i32) * EVAL_SCALE / QAB).clamp(-28000, 28000) as i16
     }
 }

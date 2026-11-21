@@ -7,10 +7,12 @@ use crate::chess::move_list::MoveList;
 use crate::chess::types::color::Color;
 use std::time::Instant;
 
+#[allow(dead_code)]
 struct PerftTT {
     entries: Box<[u128]>,
 }
 
+#[allow(dead_code)]
 impl PerftTT {
     pub fn new(mb_size: usize) -> Self {
         let size_as_bytes = mb_size * 1024 * 1024;
@@ -152,7 +154,7 @@ fn search<const PERFT_TYPE: u8, const DISPLAY: bool>(
 }
 
 pub fn perft<const PERFT_TYPE: u8>(board: &mut Board, depth: u8) -> u64 {
-    let mut transposition = PerftTT::new(128);
+    // let mut transposition = PerftTT::new(128);
 
     let mut start_pos_moves = MoveList::default();
     MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(board, &mut |mut piece_moves| {

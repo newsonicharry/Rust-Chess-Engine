@@ -172,6 +172,7 @@ impl KingAttackMasks {
             BasePiece::Rook => self.rook[key],
             BasePiece::Queen => self.queen[key],
             BasePiece::King => self.king[key],
+            BasePiece::NoPiece => unreachable!(),
         }
     }
 }

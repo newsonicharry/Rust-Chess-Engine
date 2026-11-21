@@ -2,7 +2,6 @@ use crate::chess::move_ply::MovePly;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::square::Square;
 use crate::general::bits;
-use std::cmp::Reverse;
 use std::slice::Iter;
 
 const IS_BULK: u8 = 0b00000010;
@@ -65,14 +64,6 @@ impl PieceMoves {
         self.piece_move_info &= IS_BULK | IS_PROMOTION;
         self.piece_move_info |= (MoveFlag::PromoteToKnight as u8) << FLAG_SHIFT;
     }
-
-    pub fn move_count(&self) -> u64 {
-        let raw_count = self.to_mask.count_ones() as u64;
-        if self.is_promotion() {
-            return raw_count * 4;
-        }
-        raw_count
-    }
 }
 
 impl Iterator for PieceMoves {
@@ -92,7 +83,7 @@ impl Iterator for PieceMoves {
 
             let pop_to_mask = (self.is_promotion() && self.flag() == MoveFlag::PromoteToQueen)
                 || !self.is_promotion();
-            self.to_mask &= (self.to_mask - 1) | (pop_to_mask as u64 - 1);
+            self.to_mask &= (self.to_mask.wrapping_sub(1)) | ((pop_to_mask as u64).wrapping_sub(1));
 
             let flag = self.flag();
 
@@ -199,18 +190,32 @@ impl MoveList {
     }
 
     pub fn order_moves(&mut self, orderings: &[i16; 256]) {
-        let mut indices = [0usize; 256];
-        for i in 0..self.move_count {
-            indices[i] = i;
+        let mut scores = *orderings;
+        for i in 1..self.move_count {
+            let mv = self.moves[i];
+            let sc = scores[i];
+            let mut j = i;
+            while j > 0 && scores[j - 1] < sc {
+                self.moves[j] = self.moves[j - 1];
+                scores[j] = scores[j - 1];
+                j -= 1;
+            }
+            self.moves[j] = mv;
+            scores[j] = sc;
         }
 
-        indices[..self.move_count].sort_unstable_by_key(|&i| Reverse(orderings[i]));
+        // let mut indices = [0usize; 256];
+        // for i in 0..self.move_count {
+        //     indices[i] = i;
+        // }
 
-        let original_copy = self.moves;
+        // indices[..self.move_count].sort_unstable_by_key(|&i| Reverse(orderings[i]));
 
-        for (j, &i) in indices[..self.move_count].iter().enumerate() {
-            self.moves[j] = original_copy[i];
-        }
+        // let original_copy = self.moves;
+
+        // for (j, &i) in indices[..self.move_count].iter().enumerate() {
+        //     self.moves[j] = original_copy[i];
+        // }
     }
 
     pub fn contains_move(&self, checked_move: MovePly) -> bool {

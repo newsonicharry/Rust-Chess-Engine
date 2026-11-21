@@ -121,6 +121,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             BasePiece::Rook => rook_lookup(square, all_pieces_no_king),
             BasePiece::Queen => queen_lookup(square, all_pieces_no_king),
             BasePiece::King => MOVEMENT_MASKS.king[square as usize],
+            BasePiece::NoPiece => unreachable!(),
         }
     }
 
@@ -543,7 +544,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         pinned_pieces_mask: u64,
     ) -> u32 {
         if GENERATOR_TYPE == GEN_TACTICS {
-            let enemy_king = board.king_square_const::<COLOR>();
+            let enemy_king = board.enemy_king_square_const::<COLOR>();
             let checking_squares = MOVEMENT_MASKS.knight[enemy_king as usize];
 
             allowed_squares = (allowed_squares & board.occupancy_them_const::<COLOR>())
@@ -583,7 +584,7 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         pin_ray_mask: &[u64; PIN_RAY_MASK_SIZE],
     ) -> u32 {
         if GENERATOR_TYPE == GEN_TACTICS {
-            let enemy_king = board.king_square_const::<COLOR>();
+            let enemy_king = board.enemy_king_square_const::<COLOR>();
             let checking_squares = slider_lookup(slider_type, enemy_king, board.occupancy());
 
             allowed_squares = (allowed_squares & board.occupancy_them_const::<COLOR>())

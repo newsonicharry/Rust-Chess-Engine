@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum File {
-    A,
+    A = 0,
     B,
     C,
     D,
@@ -43,7 +43,7 @@ impl Default for File {
 
 impl File {
     pub fn add(&mut self, amount: u8) {
-        *self = File::from(*self as u8 + amount);
+        *self = File::from((*self as i32 + amount as i32).min(7) as u8);
     }
 
     pub fn sub(&mut self, amount: u8) {

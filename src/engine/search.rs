@@ -8,10 +8,9 @@ use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color::White;
 use crate::chess::types::piece::BasePiece::{King, Pawn};
 use crate::engine::arbiter::Arbiter;
-use crate::engine::capture_history::CaptureHeuristics;
-use crate::engine::counter_move_heuristics::CounterMoveHeuristics;
 use crate::engine::eval::nnue::NNUE;
-use crate::engine::search_funcs::{move_is_capture, see};
+use crate::engine::heuristics::{CounterMoveHeuristics, History, KillerMoves};
+use crate::engine::search_funcs::move_is_capture;
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
@@ -25,9 +24,10 @@ const INFINITY: i16 = 30000;
 
 pub struct Searcher {
     board: Board,
-    search_stack: [MovePly; consts::MAX_DEPTH],
-    capture_heuristics: CaptureHeuristics,
+    search_stack: [MovePly; consts::MAX_MOVES],
     counter_move_heuristics: CounterMoveHeuristics,
+    killers: KillerMoves,
+    history: History,
     nodes: u128,
     tt: Arc<Transposition>,
     nnue: NNUE,
@@ -45,9 +45,10 @@ impl Searcher {
     ) -> Self {
         Self {
             board: board.clone(),
-            search_stack: [MovePly::default(); consts::MAX_DEPTH],
-            capture_heuristics: CaptureHeuristics::default(),
+            search_stack: [MovePly::default(); consts::MAX_MOVES],
             counter_move_heuristics: CounterMoveHeuristics::default(),
+            killers: KillerMoves::default(),
+            history: History::default(),
             nodes: 0,
             tt: Arc::clone(transposition),
             nnue: NNUE::new(board.clone()),
@@ -103,7 +104,7 @@ impl Searcher {
 
         let match_result = Arbiter::arbitrate(&mut self.board, &move_list);
         match match_result {
-            MatchResult::Draw => return -50,
+            MatchResult::Draw => return 0,
             MatchResult::Loss => return -INFINITY + ply as i16,
             MatchResult::NoResult => {}
         }
@@ -119,12 +120,12 @@ impl Searcher {
             && entry.depth >= depth
             && !ROOT
         {
+            if self.board.is_repetition() {
+                return 0;
+            }
+
             match entry.tt_flag {
                 TTFlag::Exact => {
-                    if self.board.is_repetition() {
-                        return -50;
-                    }
-
                     if ply == 0 {
                         self.tt
                             .best_move
@@ -136,20 +137,12 @@ impl Searcher {
                 }
                 TTFlag::Upper => {
                     if entry.eval <= alpha {
-                        if self.board.is_repetition() {
-                            return -50;
-                        }
-
-                        return Self::adjust_mate_distance(entry.eval, ply);
+                        return Self::adjust_mate_distance(alpha, ply);
                     }
                 }
                 TTFlag::Lower => {
                     if entry.eval >= beta {
-                        if self.board.is_repetition() {
-                            return -50;
-                        }
-
-                        return Self::adjust_mate_distance(entry.eval, ply);
+                        return Self::adjust_mate_distance(beta, ply);
                     }
                 }
             }
@@ -209,7 +202,7 @@ impl Searcher {
             depth -= 1;
         }
 
-        self.order_moves(&mut move_list, &tt_entry);
+        self.order_moves(&mut move_list, &tt_entry, ply);
 
         let mut capture_moves = Vec::with_capacity(20);
         let mut quiet_moves = Vec::with_capacity(20);
@@ -218,8 +211,8 @@ impl Searcher {
         let mut best_eval = -INFINITY;
         let mut best_move = move_list.move_at(0);
 
-        for (move_count, cur_move) in move_list.iter().enumerate() {
-            let is_capture = move_is_capture(&self.board, cur_move);
+        for (move_count, curr_move) in move_list.iter().enumerate() {
+            let is_capture = move_is_capture(&self.board, curr_move);
             // let reduction = LMR_REDUCTION.reduction(depth, move_count as u8);
             // let lmr_depth = (depth as i16 - reduction as i16 - 1).max(0) as u8;
             // let futility_margin = 120 + 100 * lmr_depth;
@@ -235,10 +228,10 @@ impl Searcher {
             //     continue;
             // }
 
-            self.nnue.make_move(cur_move, &self.board);
-            self.board.make_move::<true>(cur_move);
+            self.nnue.make_move(curr_move, &self.board);
+            self.board.make_move::<true>(curr_move);
 
-            self.search_stack[ply as usize] = *cur_move;
+            self.search_stack[ply as usize] = *curr_move;
 
             let mut eval;
 
@@ -277,7 +270,7 @@ impl Searcher {
             if eval >= beta {
                 self.tt.update(
                     self.board.zobrist(),
-                    *cur_move,
+                    *curr_move,
                     beta,
                     depth,
                     TTFlag::Lower,
@@ -285,43 +278,47 @@ impl Searcher {
                     ply,
                 );
 
-                self.capture_heuristics
-                    .update(&self.board, &cur_move, &capture_moves, depth);
+                // self.capture_heuristics
+                //     .update(&self.board, &cur_move, &capture_moves, depth);
 
                 if let Some(last_move) = self.board.last_move() {
                     self.counter_move_heuristics.update_counter_move(
                         last_move,
-                        *cur_move,
+                        *curr_move,
                         self.board.side_to_move(),
                     );
                 }
 
-                // self.killers.update(*cur_move, depth);
+                if !is_capture {
+                    self.killers.update(*curr_move, ply);
+                    self.history
+                        .update(*curr_move, &quiet_moves, depth, &self.board);
+                }
 
-                // self.history_heuristics.update(
-                //     cur_move,
-                //     &quiet_moves,
-                //     self.board.side_to_move(),
-                //     depth,
-                // );
+                if ROOT {
+                    self.tt
+                        .best_move
+                        .store(curr_move.packed_data(), Ordering::Relaxed);
+                    self.tt.best_move_score.store(beta, Ordering::Relaxed);
+                }
 
                 return beta;
             }
             if eval > alpha {
                 alpha = eval;
                 node_type = TTFlag::Exact;
-                best_move = *cur_move;
+                best_move = *curr_move;
             }
 
             if eval > best_eval {
                 best_eval = eval;
-                best_move = *cur_move;
+                best_move = *curr_move;
             }
 
-            if move_is_capture(&self.board, cur_move) {
-                capture_moves.push(*cur_move);
-            } else if !cur_move.flag().is_promotion() {
-                quiet_moves.push(*cur_move);
+            if move_is_capture(&self.board, curr_move) {
+                capture_moves.push(*curr_move);
+            } else if !curr_move.flag().is_promotion() {
+                quiet_moves.push(*curr_move);
             }
         }
 
@@ -335,7 +332,7 @@ impl Searcher {
             ply,
         );
 
-        if ply == 0 {
+        if ROOT && matches!(node_type, TTFlag::Exact) {
             self.tt
                 .best_move
                 .store(best_move.packed_data(), Ordering::Relaxed);
@@ -369,12 +366,12 @@ impl Searcher {
                     TTFlag::Exact => return Self::adjust_mate_distance(entry.eval, ply),
                     TTFlag::Upper => {
                         if entry.eval <= alpha {
-                            return Self::adjust_mate_distance(entry.eval, ply);
+                            return Self::adjust_mate_distance(alpha, ply);
                         }
                     }
                     TTFlag::Lower => {
                         if entry.eval >= beta {
-                            return Self::adjust_mate_distance(entry.eval, ply);
+                            return Self::adjust_mate_distance(beta, ply);
                         }
                     }
                 }
@@ -401,7 +398,7 @@ impl Searcher {
 
         let match_result = Arbiter::arbitrate(&self.board, &all_move_list);
         match match_result {
-            MatchResult::Draw => return -50,
+            MatchResult::Draw => return 0,
             MatchResult::Loss => return -INFINITY + ply as i16,
             MatchResult::NoResult => {}
         }
@@ -429,8 +426,14 @@ impl Searcher {
             self.board.undo_move();
             self.nnue.undo_move();
 
+            if eval > alpha {
+                best_move = *cur_move;
+                node_type = TTFlag::Exact;
+                alpha = eval;
+            }
+
             if eval >= beta {
-                self.tt.update(
+                /* self.tt.update(
                     self.board.zobrist(),
                     *cur_move,
                     alpha,
@@ -438,14 +441,12 @@ impl Searcher {
                     TTFlag::Lower,
                     false,
                     ply,
-                );
-                return beta;
-            }
+                ); */
+                node_type = TTFlag::Lower;
+                alpha = beta;
+                break;
 
-            if eval > alpha {
-                best_move = *cur_move;
-                node_type = TTFlag::Exact;
-                alpha = eval;
+                // return beta;
             }
         }
 
@@ -571,60 +572,69 @@ impl Searcher {
         self.tt.best_move.load(Ordering::Relaxed).into()
     }
 
-    fn order_moves(&mut self, move_list: &mut MoveList, prev_best_move: &Option<TTEntry>) {
+    fn mvv_lva(&self, curr_move: &MovePly) -> i16 {
+        if !self.board.piece_at(curr_move.to()).is_piece() {
+            return 0;
+        }
+
+        let us_value = PIECE_VALUES[self.board.piece_at(curr_move.from()) as usize];
+        let them_value = PIECE_VALUES[self.board.piece_at(curr_move.to()) as usize];
+
+        them_value - us_value / 16
+    }
+
+    fn order_moves(
+        &mut self,
+        move_list: &mut MoveList,
+        prev_best_move: &Option<TTEntry>,
+        ply_searched: u8,
+    ) {
         let mut move_values: [i16; 256] = [0; 256];
 
-        // let counter_move = MovePly::default();
-        // let last_played = self.board.last_move();
+        let potential_entry = self.tt.probe(self.board.zobrist());
 
-        // if let Some(last_move) = last_played {
-        //     counter_move = self
-        //         .counter_move_heuristics
-        //         .get_counter_move(last_move, self.board.side_to_move());
-        // }
-
-        for (i, cur_move) in move_list.iter().enumerate() {
-            if let Some(entry) = self.tt.probe(self.board.zobrist()) {
-                if entry.cur_move == *cur_move {
-                    move_values[i] = 30000;
-                    continue;
-                }
-            }
-
-            let flag = cur_move.flag();
-
-            if let Some(entry) = prev_best_move {
-                if entry.cur_move == *cur_move {
+        for (i, curr_move) in move_list.iter().enumerate() {
+            if let Some(entry) = potential_entry {
+                if entry.cur_move == *curr_move {
                     move_values[i] = INFINITY;
                     continue;
                 }
             }
 
-            move_values[i] += self.capture_heuristics.get(
-                cur_move.to(),
-                self.board.piece_at(cur_move.from()),
-                self.board.piece_at(cur_move.to()),
-            );
+            let flag = curr_move.flag();
 
-            // if *cur_move == counter_move {
-            //     move_values[i] += 300;
-            // }
+            if let Some(entry) = prev_best_move {
+                if entry.cur_move == *curr_move {
+                    move_values[i] = INFINITY;
+                    continue;
+                }
+            }
 
-            // 8 1386
-            // 1396
+            if self.board.piece_at(curr_move.to()).is_piece() {
+                move_values[i] += self.mvv_lva(curr_move) + 16000;
+            } else {
+                // dubious gains, test in future.
+                // seems to increase nodes searched
+                move_values[i] += self
+                    .history
+                    .get(self.board.piece_at(curr_move.from()), curr_move.to())
+                    / 2;
+            }
 
-            // if self.killers.contains(ply_searched, *cur_move) {
-            //     move_values[i] += 5000;
-            // }
+            if self.killers.is_first_slot(*curr_move, ply_searched) {
+                move_values[i] += 10000;
+            }
 
-            move_values[i] += 2 * see(cur_move.from(), cur_move.to(), &self.board);
+            if self.killers.is_second_slot(*curr_move, ply_searched) {
+                move_values[i] += 8000;
+            }
 
             if flag.is_promotion() {
                 move_values[i] += PIECE_VALUES[flag.promotion_piece(White) as usize] * 10;
             }
 
             if flag.is_castles() {
-                move_values[i] += 1000;
+                move_values[i] += 5000;
             }
         }
 
