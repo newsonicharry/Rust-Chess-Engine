@@ -12,14 +12,14 @@ use crate::general::bits;
 
 #[derive(Copy, Clone)]
 pub struct NNUE {
-    accumulator_stack: [Accumulator; MAX_MOVES],
+    accumulator_stack: [Accumulator; MAX_MOVES / 2],
     cur_accumulator: usize,
 }
 
 impl NNUE {
     pub fn new(mut board: Board) -> Self {
         let mut nnue = Self {
-            accumulator_stack: [Accumulator::default(); MAX_MOVES],
+            accumulator_stack: [Accumulator::default(); MAX_MOVES / 2],
             cur_accumulator: 0,
         };
 
@@ -138,23 +138,30 @@ impl NNUE {
     //     }
     // }
 
-    pub fn evaluate(&mut self, side_to_move: Color) -> i16 {
+    pub fn evaluate(&mut self, board: &Board) -> i16 {
         let white_accumulator = &self.accumulator_stack[self.cur_accumulator].white;
         let black_accumulator = &self.accumulator_stack[self.cur_accumulator].black;
 
-        let (us, them) = match side_to_move {
+        let (us, them) = match board.side_to_move() {
             Color::White => (white_accumulator.iter(), black_accumulator.iter()),
             Color::Black => (black_accumulator.iter(), white_accumulator.iter()),
         };
 
+        let num_pieces = board.occupancy().count_ones();
+        let divisor = 32usize.div_ceil(OUTPUT_BUCKETS);
+        let output_bucket = ((num_pieces as u8 - 2) / divisor as u8) as usize;
+
         let mut out = 0;
-        for (&value, &weight) in us.zip(&MODEL.l1w) {
+        for (&value, &weight) in us.zip(&MODEL.l1w[output_bucket][0]) {
             out += Self::squared_crelu(value) * weight as i32;
         }
-        for (&value, &weight) in them.zip(&MODEL.l1w[HIDDEN_SIZE..]) {
+        for (&value, &weight) in them.zip(&MODEL.l1w[output_bucket][1]) {
             out += Self::squared_crelu(value) * weight as i32;
         }
 
-        ((out / QA + MODEL.l1b as i32) * EVAL_SCALE / QAB).clamp(-28000, 28000) as i16
+        out /= QA;
+        out += MODEL.l1b[output_bucket] as i32;
+        out = ((out * EVAL_SCALE) / QAB).clamp(-28000, 28000);
+        out as i16
     }
 }

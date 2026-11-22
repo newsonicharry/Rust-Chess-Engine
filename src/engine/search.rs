@@ -187,7 +187,7 @@ impl Searcher {
         }
 
         // reverse futility pruning
-        let static_eval = self.nnue.evaluate(self.board.side_to_move());
+        let static_eval = self.nnue.evaluate(&self.board);
 
         if !pv_node
             && !self.board.in_check()
@@ -281,18 +281,17 @@ impl Searcher {
                 // self.capture_heuristics
                 //     .update(&self.board, &cur_move, &capture_moves, depth);
 
-                if let Some(last_move) = self.board.last_move() {
-                    self.counter_move_heuristics.update_counter_move(
-                        last_move,
-                        *curr_move,
-                        self.board.side_to_move(),
-                    );
-                }
-
                 if !is_capture {
                     self.killers.update(*curr_move, ply);
                     self.history
                         .update(*curr_move, &quiet_moves, depth, &self.board);
+
+                    self.counter_move_heuristics.update(
+                        *curr_move,
+                        &quiet_moves,
+                        depth,
+                        self.board.side_to_move(),
+                    );
                 }
 
                 if ROOT {
@@ -378,7 +377,7 @@ impl Searcher {
             }
         }
 
-        let eval = self.nnue.evaluate(self.board.side_to_move());
+        let eval = self.nnue.evaluate(&self.board);
 
         if eval >= beta {
             return beta;
@@ -613,12 +612,15 @@ impl Searcher {
             if self.board.piece_at(curr_move.to()).is_piece() {
                 move_values[i] += self.mvv_lva(curr_move) + 16000;
             } else {
-                // dubious gains, test in future.
-                // seems to increase nodes searched
                 move_values[i] += self
                     .history
                     .get(self.board.piece_at(curr_move.from()), curr_move.to())
                     / 2;
+
+                // move_values[i] += self
+                //     .counter_move_heuristics
+                //     .get(*curr_move, self.board.side_to_move())
+                //     / 2;
             }
 
             if self.killers.is_first_slot(*curr_move, ply_searched) {

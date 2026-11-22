@@ -33,40 +33,50 @@ impl KillerMoves {
 }
 
 const SQUARE_MOVE_MASK: u16 = 0xFFF;
+const MAX_HISTORY: i16 = 2i16.pow(14);
 
 pub struct CounterMoveHeuristics {
-    square_data: [[MovePly; NUM_SQUARES * NUM_SQUARES]; 2],
+    table: [[i16; NUM_SQUARES * NUM_SQUARES]; 2],
 }
 
 impl Default for CounterMoveHeuristics {
     fn default() -> CounterMoveHeuristics {
         CounterMoveHeuristics {
-            square_data: [[MovePly::default(); NUM_SQUARES * NUM_SQUARES]; 2],
+            table: [[0; NUM_SQUARES * NUM_SQUARES]; 2],
         }
     }
 }
 
 #[allow(dead_code)]
 impl CounterMoveHeuristics {
-    pub fn get_counter_move(&self, cur_move: MovePly, side_to_move: Color) -> MovePly {
-        let cur_square_data = (cur_move.packed_data() & SQUARE_MOVE_MASK) as usize;
-        let counter_move = self.square_data[side_to_move as usize][cur_square_data];
-
-        counter_move
+    fn clamped_update(&mut self, bonus: i16, curr_square_data: usize, color: Color) {
+        let curr_history = self.table[color as usize][curr_square_data as usize];
+        self.table[color as usize][curr_square_data as usize] +=
+            bonus - (curr_history as i32 * bonus.abs() as i32 / MAX_HISTORY as i32) as i16;
     }
 
-    pub fn update_counter_move(
+    pub fn update(
         &mut self,
-        cur_move: MovePly,
-        counter_move: MovePly,
-        side_to_move: Color,
+        best_move: MovePly,
+        other_quiets: &Vec<MovePly>,
+        depth: u8,
+        curr_color: Color,
     ) {
-        let cur_square_data = (cur_move.packed_data() & SQUARE_MOVE_MASK) as usize;
-        self.square_data[side_to_move as usize][cur_square_data] = counter_move;
+        let bonus = (depth as i16).pow(2).min(400);
+        let get_square_data = |mv: MovePly| (mv.packed_data() & SQUARE_MOVE_MASK) as usize;
+
+        self.clamped_update(bonus, get_square_data(best_move), curr_color);
+
+        for quiet in other_quiets {
+            self.clamped_update(-bonus, get_square_data(*quiet), curr_color);
+        }
+    }
+
+    pub fn get(&self, cur_move: MovePly, side_to_move: Color) -> i16 {
+        let curr_square_data = (cur_move.packed_data() & SQUARE_MOVE_MASK) as usize;
+        self.table[side_to_move as usize][curr_square_data]
     }
 }
-
-const MAX_HISTORY: i16 = 2i16.pow(14);
 
 pub struct History {
     table: [[i16; NUM_SQUARES]; NUM_PIECES],
