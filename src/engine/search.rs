@@ -40,7 +40,7 @@ const NOT_ROOT: bool = false;
 impl Searcher {
     pub fn new(
         transposition: &Arc<Transposition>,
-        board: &Board,
+        board: &mut Board,
         search_limits: &SearchLimits,
     ) -> Self {
         Self {
@@ -51,7 +51,7 @@ impl Searcher {
             history: History::default(),
             nodes: 0,
             tt: Arc::clone(transposition),
-            nnue: NNUE::new(board.clone()),
+            nnue: NNUE::new(board),
             search_limits: search_limits.clone(),
         }
     }
@@ -628,7 +628,7 @@ impl Searcher {
             }
 
             if self.killers.is_second_slot(*curr_move, ply_searched) {
-                move_values[i] += 8000;
+                move_values[i] = move_values[i].saturating_add(8000);
             }
 
             if flag.is_promotion() {
@@ -660,9 +660,9 @@ impl Searcher {
                 .stack_size(32 * 1024 * 1024)
                 .name(format!("Engine Thread {i}"))
                 .spawn(move || {
-                    let thread_board = board_copy.clone();
+                    let mut thread_board = board_copy.clone();
                     let thread_limits = limits_copy.clone();
-                    let mut searcher = Searcher::new(&tt_copy, &thread_board, &thread_limits);
+                    let mut searcher = Searcher::new(&tt_copy, &mut thread_board, &thread_limits);
 
                     searcher.iterative_deepening();
                 });

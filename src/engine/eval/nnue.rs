@@ -1,43 +1,87 @@
+use crate::chess::bitboard::Bitboard;
 use crate::chess::board::Board;
-use crate::chess::consts::MAX_MOVES;
+use crate::chess::consts::{MAX_MOVES, NUM_BASE_PIECES, NUM_PIECES};
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::move_flag::MoveFlag::{CastleLong, CastleShort};
+use crate::chess::types::piece::BasePiece;
 use crate::chess::types::piece::Piece::{BlackKing, BlackRook, WhiteKing, WhiteRook};
 use crate::chess::types::square::Square;
 use crate::engine::eval::accumulator::Accumulator;
 use crate::engine::eval::network::*;
 use crate::general::bits;
 
+#[derive(Clone, Copy)]
+pub struct CachedEntry {
+    pub accumulator: [i16; HIDDEN_SIZE],
+    pub pieces: [Bitboard; NUM_PIECES],
+}
+
+impl Default for CachedEntry {
+    fn default() -> Self {
+        Self {
+            accumulator: MODEL.l0b,
+            pieces: [Bitboard(0); NUM_PIECES],
+        }
+    }
+}
+
+#[derive(Copy, Clone, Default)]
+struct CacheTable {
+    pub table: [[[CachedEntry; INPUT_BUCKETS]; 2]; 2],
+}
+
 #[derive(Copy, Clone)]
 pub struct NNUE {
     accumulator_stack: [Accumulator; MAX_MOVES / 2],
-    cur_accumulator: usize,
+    curr_index: usize,
+    cache: CacheTable,
 }
 
 impl NNUE {
-    pub fn new(mut board: Board) -> Self {
-        let mut nnue = Self {
-            accumulator_stack: [Accumulator::default(); MAX_MOVES / 2],
-            cur_accumulator: 0,
+    pub fn new(board: &Board) -> Self {
+        let curr_accumulator = Accumulator::new(board);
+
+        let mut cache_table = CacheTable::default();
+
+        let white_flip_index = match curr_accumulator.white_flip {
+            7 => 1usize,
+            _ => 0usize,
         };
 
-        board.update_occupancy();
-        let squares_with_pieces = bits::all_squares(board.occupancy());
-        for square in squares_with_pieces {
-            let piece = board.piece_at(square);
-            nnue.accumulator_stack[nnue.cur_accumulator].add_piece(piece, square);
-        }
+        let black_flip_index = match curr_accumulator.black_flip {
+            7 => 1usize,
+            _ => 0usize,
+        };
+
+        cache_table.table[Color::White as usize][white_flip_index][curr_accumulator.white_bucket] =
+            CachedEntry {
+                accumulator: curr_accumulator.white,
+                pieces: board.all_bitboards(),
+            };
+
+        cache_table.table[Color::Black as usize][black_flip_index][curr_accumulator.black_bucket] =
+            CachedEntry {
+                accumulator: curr_accumulator.black,
+                pieces: board.all_bitboards(),
+            };
+
+        let mut nnue = Self {
+            accumulator_stack: [Accumulator::default(); MAX_MOVES / 2],
+            curr_index: 0,
+            cache: cache_table,
+        };
+        nnue.accumulator_stack[nnue.curr_index] = curr_accumulator;
 
         nnue
     }
 
     pub fn make_move(&mut self, played: &MovePly, board: &Board) {
-        self.cur_accumulator += 1;
-        self.accumulator_stack[self.cur_accumulator] =
-            self.accumulator_stack[self.cur_accumulator - 1];
-        let current_accumulator = &mut self.accumulator_stack[self.cur_accumulator];
+        self.curr_index += 1;
+        self.accumulator_stack[self.curr_index] = self.accumulator_stack[self.curr_index - 1];
+
+        let curr_accumulator = &mut self.accumulator_stack[self.curr_index];
 
         let move_flag = played.flag();
         let from = played.from();
@@ -46,17 +90,62 @@ impl NNUE {
         let piece = board.piece_at(from);
         let capture = board.piece_at(to);
 
+        if INPUT_BUCKETS != 1 && piece.is_king() {
+            let (prev_king_bucket, prev_flip, prev_accum) = match board.side_to_move() {
+                Color::White => (
+                    curr_accumulator.white_bucket,
+                    curr_accumulator.white_flip,
+                    &curr_accumulator.white,
+                ),
+                Color::Black => (
+                    curr_accumulator.black_bucket,
+                    curr_accumulator.black_flip,
+                    &curr_accumulator.black,
+                ),
+            };
+
+            let (new_king_bucket, new_flip) = get_king_bucket(to, board.side_to_move());
+
+            if prev_king_bucket != new_king_bucket || prev_flip != new_flip {
+                let prev_flip_index = match prev_flip {
+                    7 => 1usize,
+                    _ => 0usize,
+                };
+
+                self.cache.table[board.side_to_move() as usize][prev_flip_index]
+                    [prev_king_bucket] = CachedEntry {
+                    accumulator: *prev_accum,
+                    pieces: board.all_bitboards(),
+                };
+
+                let new_flip_index = match new_flip {
+                    7 => 1usize,
+                    _ => 0usize,
+                };
+                let cached = &self.cache.table[board.side_to_move() as usize][new_flip_index]
+                    [new_king_bucket];
+
+                curr_accumulator.refresh(
+                    cached,
+                    board.side_to_move(),
+                    new_king_bucket,
+                    new_flip,
+                    board,
+                );
+            }
+        }
+
         if move_flag == MoveFlag::None {
             match capture.is_piece() {
-                true => current_accumulator.make_capture(piece, from, to, capture, to),
-                false => current_accumulator.move_piece(piece, from, to),
+                true => curr_accumulator.make_capture(piece, from, to, capture, to),
+                false => curr_accumulator.move_piece(piece, from, to),
             }
         } else if move_flag == MoveFlag::DoubleJump {
-            current_accumulator.move_piece(piece, from, to);
+            curr_accumulator.move_piece(piece, from, to);
         } else if move_flag == CastleShort {
             match board.side_to_move() {
                 Color::White => {
-                    current_accumulator.make_castle(
+                    curr_accumulator.make_castle(
                         WhiteKing,
                         WhiteRook,
                         Square::E1,
@@ -66,7 +155,7 @@ impl NNUE {
                     );
                 }
                 Color::Black => {
-                    current_accumulator.make_castle(
+                    curr_accumulator.make_castle(
                         BlackKing,
                         BlackRook,
                         Square::E8,
@@ -79,7 +168,7 @@ impl NNUE {
         } else if move_flag == CastleLong {
             match board.side_to_move() {
                 Color::White => {
-                    current_accumulator.make_castle(
+                    curr_accumulator.make_castle(
                         WhiteKing,
                         WhiteRook,
                         Square::E1,
@@ -89,7 +178,7 @@ impl NNUE {
                     );
                 }
                 Color::Black => {
-                    current_accumulator.make_castle(
+                    curr_accumulator.make_castle(
                         BlackKing,
                         BlackRook,
                         Square::E8,
@@ -102,9 +191,9 @@ impl NNUE {
         } else if move_flag.is_promotion() {
             let promotion_piece = move_flag.promotion_piece(board.side_to_move());
             if capture.is_piece() {
-                current_accumulator.remove_piece(capture, to);
+                curr_accumulator.remove_piece(capture, to);
             }
-            current_accumulator.make_promotion(piece, promotion_piece, from, to);
+            curr_accumulator.make_promotion(piece, promotion_piece, from, to);
         } else if move_flag == MoveFlag::EnPassantCapture {
             let enemy_pawn_square = match board.side_to_move() {
                 Color::White => Square::from(board.en_passant_file().unwrap() as u8 + 32),
@@ -113,12 +202,12 @@ impl NNUE {
 
             let enemy_pawn = board.piece_at(enemy_pawn_square);
 
-            current_accumulator.make_capture(piece, from, to, enemy_pawn, enemy_pawn_square);
+            curr_accumulator.make_capture(piece, from, to, enemy_pawn, enemy_pawn_square);
         }
     }
 
     pub fn undo_move(&mut self) {
-        self.cur_accumulator -= 1;
+        self.curr_index -= 1;
     }
 
     fn crelu(value: i16) -> i32 {
@@ -139,17 +228,20 @@ impl NNUE {
     // }
 
     pub fn evaluate(&mut self, board: &Board) -> i16 {
-        let white_accumulator = &self.accumulator_stack[self.cur_accumulator].white;
-        let black_accumulator = &self.accumulator_stack[self.cur_accumulator].black;
+        let white_accumulator = &self.accumulator_stack[self.curr_index].white;
+        let black_accumulator = &self.accumulator_stack[self.curr_index].black;
 
         let (us, them) = match board.side_to_move() {
             Color::White => (white_accumulator.iter(), black_accumulator.iter()),
             Color::Black => (black_accumulator.iter(), white_accumulator.iter()),
         };
 
-        let num_pieces = board.occupancy().count_ones();
-        let divisor = 32usize.div_ceil(OUTPUT_BUCKETS);
-        let output_bucket = ((num_pieces as u8 - 2) / divisor as u8) as usize;
+        let mut output_bucket = 0;
+        if OUTPUT_BUCKETS != 1 {
+            let num_pieces = board.occupancy().count_ones();
+            let divisor = 32usize.div_ceil(OUTPUT_BUCKETS);
+            output_bucket = ((num_pieces as u8 - 2) / divisor as u8) as usize;
+        }
 
         let mut out = 0;
         for (&value, &weight) in us.zip(&MODEL.l1w[output_bucket][0]) {

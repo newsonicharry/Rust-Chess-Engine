@@ -1,12 +1,21 @@
-use crate::chess::consts::NUM_SQUARES;
-use crate::chess::types::piece::Piece;
+use crate::chess::bitboard::Bitboard;
+use crate::chess::board::Board;
+use crate::chess::consts::{NUM_BASE_PIECES, NUM_SQUARES};
+use crate::chess::types::color::Color;
+use crate::chess::types::piece::{ITER_ALL, Piece};
 use crate::chess::types::square::Square;
 use crate::engine::eval::network::*;
+use crate::engine::eval::nnue::CachedEntry;
+use crate::general::bits;
 
 #[derive(Copy, Clone)]
 pub struct Accumulator {
     pub white: [i16; HIDDEN_SIZE],
     pub black: [i16; HIDDEN_SIZE],
+    pub white_bucket: usize,
+    pub black_bucket: usize,
+    pub white_flip: u8,
+    pub black_flip: u8,
 }
 
 impl Default for Accumulator {
@@ -14,13 +23,96 @@ impl Default for Accumulator {
         Self {
             white: MODEL.l0b,
             black: MODEL.l0b,
+            white_bucket: 0,
+            black_bucket: 0,
+            white_flip: 0,
+            black_flip: 0,
         }
     }
 }
 
 impl Accumulator {
-    fn nnue_index(piece: Piece, square: Square) -> (usize, usize) {
-        let white_idx = NUM_SQUARES * piece as usize + square as usize;
+    pub fn new(board: &Board) -> Accumulator {
+        let mut accumulator = Accumulator::default();
+
+        if INPUT_BUCKETS != 1 {
+            (accumulator.white_bucket, accumulator.white_flip) =
+                get_king_bucket(board.king_square(Color::White), Color::White);
+            (accumulator.black_bucket, accumulator.black_flip) =
+                get_king_bucket(board.king_square(Color::Black), Color::Black);
+        }
+
+        let squares_with_pieces = bits::all_squares(board.occupancy());
+        for square in squares_with_pieces {
+            let piece = board.piece_at(square);
+            accumulator.add_piece(piece, square);
+        }
+
+        accumulator
+    }
+
+    pub fn refresh(
+        &mut self,
+        cache: &CachedEntry,
+        side: Color,
+        new_bucket: usize,
+        new_flip: u8,
+        board: &Board,
+    ) {
+        match side {
+            Color::White => {
+                self.white = cache.accumulator;
+                self.white_bucket = new_bucket;
+                self.white_flip = new_flip;
+            }
+            Color::Black => {
+                self.black = cache.accumulator;
+                self.black_bucket = new_bucket;
+                self.black_flip = new_flip;
+            }
+        };
+
+        for piece in Piece::iterator::<ITER_ALL>() {
+            let saved = cache.pieces[piece as usize];
+            let curr = board.bitboard_piece(piece);
+            let mut add = curr & !saved;
+            let mut sub = saved & !curr;
+
+            while add != 0 {
+                let index = add.trailing_zeros();
+                self.modify_sided_piece(1, side, piece, index.into());
+                add &= !(1u64 << index);
+            }
+
+            while sub != 0 {
+                let index = sub.trailing_zeros();
+                self.modify_sided_piece(-1, side, piece, index.into());
+                sub &= !(1u64 << index);
+            }
+        }
+
+        // match side {
+        //     Color::White => {
+        //         self.white = MODEL.l0b;
+        //         self.white_bucket = new_bucket;
+        //         self.white_flip = new_flip;
+        //     }
+        //     Color::Black => {
+        //         self.black = MODEL.l0b;
+        //         self.black_bucket = new_bucket;
+        //         self.black_flip = new_flip;
+        //     }
+        // };
+
+        // let squares_with_pieces = bits::all_squares(board.occupancy());
+        // for square in squares_with_pieces {
+        //     let piece = board.piece_at(square);
+        //     self.modify_sided_piece(1, side, piece, square);
+        // }
+    }
+
+    fn nnue_index(&self, piece: Piece, square: Square) -> (usize, usize) {
+        let white_idx = NUM_SQUARES * piece as usize + square as usize ^ self.white_flip as usize;
 
         let mut reversed_color = piece as u8;
         if reversed_color >= 6 {
@@ -29,25 +121,43 @@ impl Accumulator {
             reversed_color += 6;
         }
 
-        let black_idx = NUM_SQUARES * reversed_color as usize + square.vert_flip() as usize;
+        let black_idx = NUM_SQUARES * reversed_color as usize + square.vert_flip() as usize
+            ^ self.black_flip as usize;
 
         (white_idx * HIDDEN_SIZE, black_idx * HIDDEN_SIZE)
     }
 
     pub fn remove_piece(&mut self, piece: Piece, square: Square) {
-        let (white_idx, black_idx) = Self::nnue_index(piece, square);
+        let (white_idx, black_idx) = self.nnue_index(piece, square);
 
         for i in 0..HIDDEN_SIZE {
-            self.white[i] -= MODEL.l0w[i + white_idx];
-            self.black[i] -= MODEL.l0w[i + black_idx];
+            self.white[i] -= MODEL.l0w[self.white_bucket][i + white_idx];
+            self.black[i] -= MODEL.l0w[self.black_bucket][i + black_idx];
         }
     }
     pub fn add_piece(&mut self, piece: Piece, square: Square) {
-        let (white_idx, black_idx) = Self::nnue_index(piece, square);
+        let (white_idx, black_idx) = self.nnue_index(piece, square);
 
         for i in 0..HIDDEN_SIZE {
-            self.white[i] += MODEL.l0w[i + white_idx];
-            self.black[i] += MODEL.l0w[i + black_idx];
+            self.white[i] += MODEL.l0w[self.white_bucket][i + white_idx];
+            self.black[i] += MODEL.l0w[self.black_bucket][i + black_idx];
+        }
+    }
+
+    fn modify_sided_piece(&mut self, sign: i16, side: Color, piece: Piece, square: Square) {
+        let index;
+        if side == Color::White {
+            (index, ..) = self.nnue_index(piece, square);
+
+            for i in 0..HIDDEN_SIZE {
+                self.white[i] += sign * MODEL.l0w[self.white_bucket][i + index];
+            }
+        } else {
+            (.., index) = self.nnue_index(piece, square);
+
+            for i in 0..HIDDEN_SIZE {
+                self.black[i] += sign * MODEL.l0w[self.black_bucket][i + index];
+            }
         }
     }
 

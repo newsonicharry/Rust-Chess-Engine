@@ -129,6 +129,10 @@ impl Board {
         self.zobrist = ZOBRIST.hash_from_board(&self);
     }
 
+    pub fn all_bitboards(&self) -> [Bitboard; NUM_PIECES] {
+        self.bitboards
+    }
+
     pub fn is_repetition(&self) -> bool {
         let Some(board_states) = self.past_board_states() else {
             return false;
@@ -182,6 +186,10 @@ impl Board {
         self.bitboards[base_piece as usize].0
     }
 
+    pub fn bitboard_piece(&self, piece: Piece) -> u64 {
+        self.bitboards[piece as usize].0
+    }
+
     pub fn bitboard(&self, base_piece: BasePiece, color: Color) -> u64 {
         match color {
             Color::White => self.bitboards[base_piece as usize].0,
@@ -221,6 +229,14 @@ impl Board {
             Color::White => self.bitboards[WhiteKing as usize].0.trailing_zeros().into(),
             Color::Black => self.bitboards[BlackKing as usize].0.trailing_zeros().into(),
         }
+    }
+
+    pub fn occupancy_white(&self) -> u64 {
+        self.white_occupancy
+    }
+
+    pub fn occupancy_black(&self) -> u64 {
+        self.black_occupancy
     }
 
     pub fn occupancy_us(&self) -> u64 {

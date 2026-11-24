@@ -6,6 +6,7 @@ use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::engine::arbiter::Arbiter;
+use crate::engine::eval::nnue::NNUE;
 use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT, perft};
 use crate::engine::search::Searcher;
 use crate::engine::search_limits::SearchLimits;
@@ -64,8 +65,8 @@ fn main() {
 
     board.new(&current_fen);
 
-    // let mut nnue = NNUE::new(board);
-    // println!("{}", nnue.evaluate(Color::White));
+    // let mut nnue = NNUE::new(&mut board);
+    // println!("{}", nnue.evaluate(&board));
     // exit(0);
 
     let mut tt_size = 16;
@@ -388,7 +389,7 @@ pub fn run_self_play() {
                 MatchResult::NoResult => {}
             }
 
-            let mut searcher = Searcher::new(&tt, &board, &SearchLimits::new(1000, 1000));
+            let mut searcher = Searcher::new(&tt, &mut board, &SearchLimits::new(1000, 1000));
 
             let move_played = searcher.iterative_deepening();
 
