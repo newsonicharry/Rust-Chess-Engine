@@ -1,5 +1,10 @@
 cargo-features = ["profile-rustflags"]
 
+
+[[bin]]
+name = "chess-engine"
+path = "src/main.rs"
+
 # [toolchain]
 # channel = "nightly"
 
@@ -14,7 +19,7 @@ portable-atomic = { version = "1.0", features = ["fallback"] }
 # cozy-chess = "0.3.4"
 
 [profile.release]
-# debug = true
+debug = true
 opt-level = 3
 lto = "thin"
 target-cpu = "native"

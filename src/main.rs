@@ -6,7 +6,6 @@ use crate::chess::move_ply;
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::engine::arbiter::Arbiter;
-use crate::engine::eval::nnue::NNUE;
 use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT, perft};
 use crate::engine::search::Searcher;
 use crate::engine::search_limits::SearchLimits;
@@ -16,8 +15,6 @@ use crate::uci::commands::{Commands, OptionsType};
 use crate::uci::option_table::print_option_table;
 use crate::uci::parser;
 use std::env;
-use std::fs::File;
-use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
 
@@ -352,19 +349,20 @@ pub fn run_perft_pgo() {
 pub fn run_self_play() {
     use std::sync::atomic::Ordering;
 
-    let mut fen_file =
-        File::open("/home/harry-phillips-desktop/Desktop/UHO_2022_8mvs_+110_+119.epd").unwrap();
-    let mut string = String::new();
-    fen_file.read_to_string(&mut string).unwrap();
-    let all_fens = string.split("\n").collect::<Vec<&str>>();
+    // let mut fen_file =
+    //     File::open("/home/harry-phillips-desktop/Desktop/UHO_2022_8mvs_+110_+119.epd").unwrap();
+    // let mut string = String::new();
+    // fen_file.read_to_string(&mut string).unwrap();
+    // let all_fens = string.split("\n").collect::<Vec<&str>>();
 
-    for fen in all_fens.iter() {
+    // for fen in all_fens.iter() {
+    for fen in [START_POS] {
         let tt = Arc::new(Transposition::new(16));
 
         let mut uci_moves_played: Vec<MovePly> = Vec::new();
 
         for i in 0.. {
-            if i > 90 {
+            if i > 30 {
                 return;
             }
 

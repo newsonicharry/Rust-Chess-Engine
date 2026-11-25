@@ -1,16 +1,14 @@
 use crate::chess::bitboard::Bitboard;
 use crate::chess::board::Board;
-use crate::chess::consts::{MAX_MOVES, NUM_BASE_PIECES, NUM_PIECES};
+use crate::chess::consts::{MAX_MOVES, NUM_PIECES};
 use crate::chess::move_ply::MovePly;
 use crate::chess::types::color::Color;
 use crate::chess::types::move_flag::MoveFlag;
 use crate::chess::types::move_flag::MoveFlag::{CastleLong, CastleShort};
-use crate::chess::types::piece::BasePiece;
 use crate::chess::types::piece::Piece::{BlackKing, BlackRook, WhiteKing, WhiteRook};
 use crate::chess::types::square::Square;
 use crate::engine::eval::accumulator::Accumulator;
 use crate::engine::eval::network::*;
-use crate::general::bits;
 
 #[derive(Clone, Copy)]
 pub struct CachedEntry {
@@ -210,14 +208,6 @@ impl NNUE {
         self.curr_index -= 1;
     }
 
-    fn crelu(value: i16) -> i32 {
-        (value as i32).clamp(CR_MIN, CR_MAX)
-    }
-
-    fn squared_crelu(value: i16) -> i32 {
-        Self::crelu(value).pow(2)
-    }
-
     // fn propagate_l2(&mut self) {
     //     self.l1 = MODEL.l1b[0];
 
@@ -226,6 +216,13 @@ impl NNUE {
     //         out += Self::squared_crelu(value) * weight as i32;
     //     }
     // }
+
+    fn calc_output(value: i16, weight: i16) -> i32 {
+        // identical logic, just keeps everything as an i16 when possible for performance
+        let clamped = (value).clamp(CR_MIN as i16, CR_MAX as i16);
+        let multiply = clamped.wrapping_mul(weight);
+        multiply as i32 * clamped as i32
+    }
 
     pub fn evaluate(&mut self, board: &Board) -> i16 {
         let white_accumulator = &self.accumulator_stack[self.curr_index].white;
@@ -245,15 +242,15 @@ impl NNUE {
 
         let mut out = 0;
         for (&value, &weight) in us.zip(&MODEL.l1w[output_bucket][0]) {
-            out += Self::squared_crelu(value) * weight as i32;
+            out += Self::calc_output(value, weight);
         }
         for (&value, &weight) in them.zip(&MODEL.l1w[output_bucket][1]) {
-            out += Self::squared_crelu(value) * weight as i32;
+            out += Self::calc_output(value, weight);
         }
 
         out /= QA;
         out += MODEL.l1b[output_bucket] as i32;
-        out = ((out * EVAL_SCALE) / QAB).clamp(-28000, 28000);
+        out = ((out * EVAL_SCALE) / QAB as i32).clamp(-28000, 28000);
         out as i16
     }
 }

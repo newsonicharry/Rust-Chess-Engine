@@ -3,13 +3,13 @@ use std::mem;
 use crate::chess::types::{color::Color, square::Square};
 
 pub const NUM_FEATURES: usize = 768;
-pub const HIDDEN_SIZE: usize = 768;
+pub const HIDDEN_SIZE: usize = 1024;
 
 // pub const L1: usize = 16;
 // pub const L2: usize = 32;
 
-pub const OUTPUT_BUCKETS: usize = 1;
-pub const INPUT_BUCKETS: usize = 1;
+pub const OUTPUT_BUCKETS: usize = 8;
+pub const INPUT_BUCKETS: usize = 10;
 
 #[rustfmt::skip]
 pub const BUCKET_LAYOUT: [usize; 64] = [
@@ -51,7 +51,7 @@ pub const QAB: i32 = 255 * 64;
 pub const EVAL_SCALE: i32 = 400;
 
 #[repr(C)]
-// #[repr(align(64))]
+#[repr(align(64))]
 pub struct Network {
     pub l0w: [[i16; NUM_FEATURES * HIDDEN_SIZE]; INPUT_BUCKETS],
     pub l0b: [i16; HIDDEN_SIZE],
@@ -70,4 +70,5 @@ pub struct Network {
     // pub l3b: [f32; OUTPUT_BUCKETS],
 }
 
-pub static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./bins/quantised_768.bin")) };
+pub static MODEL: Network =
+    unsafe { mem::transmute(*include_bytes!("./bins/quantised1024_8_10.bin")) };
