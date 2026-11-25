@@ -10,7 +10,7 @@ use crate::chess::types::piece::BasePiece::{King, Pawn};
 use crate::engine::arbiter::Arbiter;
 use crate::engine::eval::nnue::NNUE;
 use crate::engine::heuristics::{CounterMoveHeuristics, History, KillerMoves};
-use crate::engine::search_funcs::move_is_capture;
+use crate::engine::search_funcs::{move_is_capture, see};
 use crate::engine::search_limits::SearchLimits;
 use crate::engine::transposition::{TTEntry, Transposition};
 use crate::engine::types::match_result::MatchResult;
@@ -77,30 +77,14 @@ impl Searcher {
             return 0;
         }
 
-        // let mating_value = INFINITY - ply as i16;
-        // if mating_value < beta {
-        //     beta = mating_value;
-        //     if alpha >= beta {
-        //         return beta;
-        //     }
-        // }
-
-        // let mated_value = -INFINITY + ply as i16;
-        // if mated_value > alpha {
-        //     alpha = mated_value;
-        //     if alpha >= beta {
-        //         return alpha;
-        //     }
-        // }
-
-        if self.board.in_check() {
-            depth += 1;
-        }
-
         let mut move_list = MoveList::default();
         MoveGenerator::<GEN_ALL>::generate::<NOT_LEAF>(&mut self.board, &mut |mut piece_moves| {
             move_list.add_piece_moves(&mut piece_moves);
         });
+
+        if self.board.in_check() {
+            depth += 1;
+        }
 
         let match_result = Arbiter::arbitrate(&mut self.board, &move_list);
         match match_result {
@@ -158,6 +142,17 @@ impl Searcher {
             }
         };
 
+        // reverse futility pruning
+        let static_eval = self.nnue.evaluate(&self.board);
+
+        if !pv_node
+            && !self.board.in_check()
+            && static_eval >= (beta + 100 * depth as i16)
+            && depth < 9
+        {
+            return beta;
+        }
+
         if !self.board.in_check()
             && depth >= 3
             && !Self::in_zugzwang(&self.board)
@@ -186,17 +181,6 @@ impl Searcher {
             }
         }
 
-        // reverse futility pruning
-        let static_eval = self.nnue.evaluate(&self.board);
-
-        if !pv_node
-            && !self.board.in_check()
-            && static_eval >= (beta + 100 * depth as i16)
-            && depth < 9
-        {
-            return beta;
-        }
-
         // internal iterative reduction
         if depth > 3 && tt_entry.is_none() && !ROOT {
             depth -= 1;
@@ -211,22 +195,24 @@ impl Searcher {
         let mut best_eval = -INFINITY;
         let mut best_move = move_list.move_at(0);
 
+        let mut quiet_seen = 0;
         for (move_count, curr_move) in move_list.iter().enumerate() {
             let is_capture = move_is_capture(&self.board, curr_move);
-            // let reduction = LMR_REDUCTION.reduction(depth, move_count as u8);
-            // let lmr_depth = (depth as i16 - reduction as i16 - 1).max(0) as u8;
-            // let futility_margin = 120 + 100 * lmr_depth;
 
-            // if !is_capture
-            //     && !cur_move.flag().is_promotion()
-            //     && !self.board.in_check()
-            //     && !pv_node
-            //     && !ROOT
-            //     && depth <= 3
-            //     && static_eval + futility_margin as i16 <= alpha
-            // {
-            //     continue;
-            // }
+            if !pv_node
+                && !ROOT
+                && !self.board.in_check()
+                && move_count > 0
+                && depth <= 3
+                && !is_capture
+                && !curr_move.flag().is_promotion()
+                && best_eval > -29000
+            {
+                quiet_seen += 1;
+                if quiet_seen >= [0, 5, 10, 15][depth as usize] {
+                    continue;
+                }
+            }
 
             self.nnue.make_move(curr_move, &self.board);
             self.board.make_move::<true>(curr_move);
@@ -238,11 +224,12 @@ impl Searcher {
             let should_reduce =
                 depth >= 3 && move_count >= 4 && !is_capture && !self.board.in_check();
 
-            if should_reduce {
+            if move_count == 0 {
+                eval = -self.search::<NOT_ROOT>(ply + 1, depth - 1, -beta, -alpha);
+            } else if should_reduce {
                 let reduction = LMR_REDUCTION.reduction(depth, move_count as u8);
                 let lmr_depth = (depth as i16 - reduction as i16 - 1).max(0) as u8;
 
-                // let reduction = 1;
                 eval = -self.search::<NOT_ROOT>(ply + 1, lmr_depth, -(alpha + 1), -alpha);
 
                 if eval > alpha {
@@ -378,12 +365,14 @@ impl Searcher {
         }
 
         let eval = self.nnue.evaluate(&self.board);
+        let mut node_type = TTFlag::Upper;
 
         if eval >= beta {
             return beta;
         }
         if alpha < eval {
-            alpha = eval
+            alpha = eval;
+            node_type = TTFlag::Exact;
         }
 
         if depth == 0 {
@@ -410,7 +399,20 @@ impl Searcher {
             },
         );
 
-        let mut node_type = TTFlag::Upper;
+        let mut scores = [0; 256];
+        for (i, mv) in tactial_move_list.iter().enumerate() {
+            scores[i] = if tt_entry.is_some_and(|e| e.cur_move == *mv) {
+                30000
+            } else if mv.flag().is_promotion() {
+                15000 + PIECE_VALUES[mv.flag().promotion_piece(White) as usize]
+            } else {
+                self.mvv_lva(mv)
+            };
+        }
+
+        tactial_move_list.order_moves(&scores);
+        // self.order_moves(&mut tactial_move_list, &tt_entry, ply);
+
         let mut best_move = tactial_move_list.move_at(0);
 
         for cur_move in tactial_move_list.iter() {
@@ -609,8 +611,19 @@ impl Searcher {
                 }
             }
 
+            if flag.is_promotion() {
+                move_values[i] = 15000 + PIECE_VALUES[flag.promotion_piece(White) as usize];
+                continue;
+            }
+
             if self.board.piece_at(curr_move.to()).is_piece() {
                 move_values[i] += self.mvv_lva(curr_move) + 16000;
+                // let see_value = see(curr_move.from(), curr_move.to(), &self.board);
+                // move_values[i] += if see_value.is_negative() {
+                //     see_value
+                // } else {
+                //     see_value + 16000
+                // };
             } else {
                 move_values[i] += self
                     .history
@@ -629,10 +642,6 @@ impl Searcher {
 
             if self.killers.is_second_slot(*curr_move, ply_searched) {
                 move_values[i] = move_values[i].saturating_add(8000);
-            }
-
-            if flag.is_promotion() {
-                move_values[i] += PIECE_VALUES[flag.promotion_piece(White) as usize] * 10;
             }
 
             if flag.is_castles() {

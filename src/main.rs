@@ -362,7 +362,7 @@ pub fn run_self_play() {
         let mut uci_moves_played: Vec<MovePly> = Vec::new();
 
         for i in 0.. {
-            if i > 30 {
+            if i > 60 {
                 return;
             }
 

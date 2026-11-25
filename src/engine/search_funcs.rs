@@ -99,7 +99,7 @@ fn least_valuable_attacker(
 }
 
 pub fn move_is_capture(board: &Board, played: &MovePly) -> bool {
-    board.occupancy_them() & played.to().mask() != 0
+    board.occupancy_them() & played.to().mask() != 0 || played.flag().is_en_passant_capture()
 }
 
 #[allow(dead_code)]
