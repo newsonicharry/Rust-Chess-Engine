@@ -1,17 +1,27 @@
-use crate::chess::board::Board;
-use crate::chess::consts::NUM_SQUARES;
-use crate::chess::move_list::PieceMoves;
-use crate::chess::types::color::Color;
-use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::piece::BasePiece;
-use crate::chess::types::piece::BasePiece::{Bishop, Knight, Pawn, Queen, Rook};
-use crate::chess::types::square::Square;
-use crate::general::bits;
-use crate::precomputed::accessor::{
-    IN_BETWEEN, KING_ATTACK_MASKS, MOVEMENT_MASKS, bishop_lookup, queen_lookup, rook_lookup,
-    slider_lookup,
+use crate::{
+    chess::{
+        board::Board,
+        consts::NUM_SQUARES,
+        move_list::PieceMoves,
+        types::{
+            color::Color,
+            move_flag::MoveFlag,
+            piece::{
+                BasePiece,
+                BasePiece::{Bishop, Knight, Pawn, Queen, Rook},
+            },
+            square::Square,
+        },
+    },
+    general::bits,
+    precomputed::{
+        accessor::{
+            IN_BETWEEN, KING_ATTACK_MASKS, MOVEMENT_MASKS, bishop_lookup, queen_lookup,
+            rook_lookup, slider_lookup,
+        },
+        generators::king_attack_masks::KingAttackLookupData,
+    },
 };
-use crate::precomputed::generators::king_attack_masks::KingAttackLookupData;
 
 pub struct MoveGenerator<const GENERATOR_TYPE: bool> {}
 
@@ -47,6 +57,21 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         match board.side_to_move() {
             Color::White => Self::const_generate::<WHITE, IS_LEAF>(board, move_iter),
             Color::Black => Self::const_generate::<BLACK, IS_LEAF>(board, move_iter),
+        }
+    }
+
+    pub fn update_check_data(board: &mut Board) -> bool {
+        let (pieces_checking, ..) = match board.side_to_move() {
+            Color::White => Self::get_check_data::<WHITE>(board),
+            Color::Black => Self::get_check_data::<BLACK>(board),
+        };
+
+        if pieces_checking != 0 {
+            board.set_in_check(true);
+            return true;
+        } else {
+            board.set_in_check(false);
+            return false;
         }
     }
 
@@ -108,23 +133,6 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         index
     }
 
-    fn get_attacks(
-        side_to_move: Color,
-        square: Square,
-        piece: BasePiece,
-        all_pieces_no_king: u64,
-    ) -> u64 {
-        match piece {
-            BasePiece::Pawn => MOVEMENT_MASKS.pawn_attacks(!side_to_move, square),
-            BasePiece::Knight => MOVEMENT_MASKS.knight[square as usize],
-            BasePiece::Bishop => bishop_lookup(square, all_pieces_no_king),
-            BasePiece::Rook => rook_lookup(square, all_pieces_no_king),
-            BasePiece::Queen => queen_lookup(square, all_pieces_no_king),
-            BasePiece::King => MOVEMENT_MASKS.king[square as usize],
-            BasePiece::NoPiece => unreachable!(),
-        }
-    }
-
     #[inline(always)]
     fn get_enemy_attacks<const COLOR: bool>(
         board: &Board,
@@ -135,12 +143,8 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
             ($bitboard: ident, $piece: expr, $attack_mask: ident, $board: ident, $all_pieces_no_king: ident) => {{
                 while $bitboard != 0 {
                     let square = Self::pop_lsb(&mut $bitboard).into();
-                    $attack_mask |= Self::get_attacks(
-                        board.side_to_move(),
-                        square,
-                        $piece,
-                        $all_pieces_no_king,
-                    );
+                    $attack_mask |=
+                        get_attacks(board.side_to_move(), square, $piece, $all_pieces_no_king);
                 }
             }};
         }
@@ -652,7 +656,11 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
 
         if GENERATOR_TYPE == GEN_TACTICS {
-            valid_moves &= board.occupancy_them_const::<COLOR>();
+            // tactical moves are moves that either capture a piece
+            // or valid king moves when in check
+            if pieces_checking == 0 {
+                valid_moves &= board.occupancy_them_const::<COLOR>();
+            }
             Self::iter_single(king_square, valid_moves, MoveFlag::None, move_iter);
             return 0;
         }
@@ -753,5 +761,22 @@ impl<const GENERATOR_TYPE: bool> MoveGenerator<GENERATOR_TYPE> {
         }
 
         pinned_pieces_mask
+    }
+}
+
+pub fn get_attacks(
+    side_to_move: Color,
+    square: Square,
+    piece: BasePiece,
+    all_pieces_no_king: u64,
+) -> u64 {
+    match piece {
+        BasePiece::Pawn => MOVEMENT_MASKS.pawn_attacks(!side_to_move, square),
+        BasePiece::Knight => MOVEMENT_MASKS.knight[square as usize],
+        BasePiece::Bishop => bishop_lookup(square, all_pieces_no_king),
+        BasePiece::Rook => rook_lookup(square, all_pieces_no_king),
+        BasePiece::Queen => queen_lookup(square, all_pieces_no_king),
+        BasePiece::King => MOVEMENT_MASKS.king[square as usize],
+        BasePiece::NoPiece => unreachable!(),
     }
 }

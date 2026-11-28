@@ -1,7 +1,10 @@
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::file::File;
-use crate::chess::types::piece::Piece;
-use crate::chess::types::piece::Piece::NoPiece;
+use crate::chess::{
+    move_ply::MovePly,
+    types::{
+        file::File,
+        piece::{Piece, Piece::NoPiece},
+    },
+};
 
 #[derive(Copy, Clone)]
 #[repr(C)]

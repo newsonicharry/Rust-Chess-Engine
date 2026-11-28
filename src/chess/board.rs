@@ -1,22 +1,30 @@
-use crate::chess::bitboard::Bitboard;
-use crate::chess::board_state::BoardState;
-use crate::chess::consts::{MAX_MOVES, NUM_PIECES, NUM_SQUARES};
-use crate::chess::move_generator::{BLACK, WHITE};
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::color::Color;
-use crate::chess::types::file::File;
-use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::piece::Piece::{
-    BlackBishop, BlackKing, BlackPawn, BlackQueen, BlackRook, NoPiece, WhiteBishop, WhiteKing,
-    WhitePawn, WhiteQueen, WhiteRook,
-};
-use crate::chess::types::piece::{
-    BasePiece, ITER_BLACK, ITER_WHITE, Piece, basepiece_to_piece, char_to_piece,
-};
-use crate::chess::types::rank::Rank;
-use crate::chess::types::square::Square;
-use crate::precomputed::accessor::ZOBRIST;
 use std::fmt::Display;
+
+use crate::{
+    chess::{
+        bitboard::Bitboard,
+        board_state::BoardState,
+        consts::{MAX_MOVES, NUM_PIECES, NUM_SQUARES},
+        move_generator::{BLACK, WHITE},
+        move_ply::MovePly,
+        types::{
+            color::Color,
+            file::File,
+            move_flag::MoveFlag,
+            piece::{
+                BasePiece, ITER_BLACK, ITER_WHITE, Piece,
+                Piece::{
+                    BlackBishop, BlackKing, BlackPawn, BlackQueen, BlackRook, NoPiece, WhiteBishop,
+                    WhiteKing, WhitePawn, WhiteQueen, WhiteRook,
+                },
+                basepiece_to_piece, char_to_piece,
+            },
+            rank::Rank,
+            square::Square,
+        },
+    },
+    precomputed::accessor::ZOBRIST,
+};
 
 // if a piece on a certain square moves then the castling rights must change as well
 const SQUARE_MOVED_CASTLING: [u8; NUM_SQUARES] = [
@@ -80,6 +88,8 @@ impl Board {
     // fen string is considered accurate at this point
     // determining the fen strings accuracy is the job of the uci
     pub fn new(&mut self, fen: &str) {
+        *self = Self::default();
+
         let split_fen: Vec<&str> = fen.split_whitespace().collect();
 
         let fen_sequence = split_fen.get(0).unwrap();

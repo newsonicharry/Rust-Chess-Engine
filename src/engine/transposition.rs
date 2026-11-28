@@ -1,8 +1,26 @@
-use crate::chess::move_ply::MovePly;
-use crate::engine::types::tt_flag::TTFlag;
+use std::{
+    mem,
+    sync::atomic::{AtomicI16, AtomicU16, Ordering},
+};
+
 use portable_atomic::{AtomicU8, AtomicU32, AtomicU128};
-use std::mem;
-use std::sync::atomic::{AtomicI16, AtomicU16, Ordering};
+
+use crate::chess::move_ply::MovePly;
+
+#[repr(u8)]
+#[derive(Clone, Copy, Default)]
+pub enum TTFlag {
+    #[default]
+    Upper,
+    Lower,
+    Exact,
+}
+
+impl From<u8> for TTFlag {
+    fn from(val: u8) -> Self {
+        unsafe { std::mem::transmute(val) }
+    }
+}
 
 // Type     Bits
 // zobrist: 64

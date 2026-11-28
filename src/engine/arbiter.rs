@@ -1,9 +1,18 @@
-use crate::chess::board::Board;
-use crate::chess::move_list::MoveList;
-use crate::chess::types::piece::BasePiece::{Pawn, Queen, Rook};
-use crate::engine::types::match_result::MatchResult;
-use crate::general::bits;
-use std::collections::HashMap;
+use crate::{
+    chess::{
+        board::Board,
+        move_list::MoveList,
+        types::piece::BasePiece::{Pawn, Queen, Rook},
+    },
+    general::bits,
+};
+
+#[derive(Debug)]
+pub enum MatchResult {
+    Loss,
+    Draw,
+    NoResult,
+}
 
 pub struct Arbiter {}
 
@@ -12,11 +21,10 @@ impl Arbiter {
         if Self::is_checkmate(board, move_list) {
             return MatchResult::Loss;
         }
-
         if Self::is_insufficient_material(board)
             || Self::is_stalemate(board, move_list)
             || Self::is_fifty_move_rule(board)
-            || Self::is_three_fold(board)
+            || board.is_repetition()
         {
             return MatchResult::Draw;
         }
@@ -61,22 +69,17 @@ impl Arbiter {
     }
 
     fn is_three_fold(board: &Board) -> bool {
-        if board.half_move_clock() == 0 {
-            return false;
-        }
-
-        let mut position_count = HashMap::new();
-        position_count.insert(board.zobrist(), 1);
+        // if board.half_move_clock() == 0 {
+        //     return false;
+        // }
 
         if let Some(past_states) = board.past_board_states() {
-            for past_board_state in past_states.iter().rev() {
-                *position_count.entry(past_board_state.zobrist).or_insert(0) += 1;
-
-                if position_count[&past_board_state.zobrist] >= 3 {
+            for past_state in past_states.iter().rev() {
+                if past_state.zobrist == board.zobrist() {
                     return true;
                 }
 
-                if past_board_state.half_move_clock == 0 {
+                if past_state.half_move_clock == 0 {
                     break;
                 }
             }

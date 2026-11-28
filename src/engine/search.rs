@@ -1,31 +1,41 @@
-use crate::chess::board::Board;
-use crate::chess::consts;
-use crate::chess::consts::PIECE_VALUES;
-use crate::chess::move_generator::MoveGenerator;
-use crate::chess::move_generator::{GEN_ALL, GEN_TACTICS, NOT_LEAF};
-use crate::chess::move_list::MoveList;
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::color::Color::White;
-use crate::chess::types::piece::BasePiece::{King, Pawn};
-use crate::engine::arbiter::Arbiter;
-use crate::engine::eval::nnue::NNUE;
-use crate::engine::heuristics::{CounterMoveHeuristics, History, KillerMoves};
-use crate::engine::search_funcs::{move_is_capture, see};
-use crate::engine::search_limits::SearchLimits;
-use crate::engine::transposition::{TTEntry, Transposition};
-use crate::engine::types::match_result::MatchResult;
-use crate::engine::types::tt_flag::TTFlag;
-use crate::precomputed::accessor::LMR_REDUCTION;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
-use std::thread;
+use std::{
+    sync::{Arc, atomic::Ordering},
+    thread,
+};
+
+use crate::{
+    chess::{
+        board::Board,
+        consts::{self, PIECE_VALUES},
+        move_generator::{GEN_ALL, GEN_TACTICS, MoveGenerator, NOT_LEAF},
+        move_list::MoveList,
+        move_ply::MovePly,
+        types::{
+            color::Color::White,
+            piece::{
+                BasePiece::{King, Pawn},
+                Piece,
+            },
+        },
+    },
+    engine::{
+        arbiter::{Arbiter, MatchResult},
+        eval::nnue::NNUE,
+        heuristics::{ContinuationHistory, CounterMoveHeuristics, History, KillerMoves},
+        search_funcs::{move_is_capture, see},
+        search_limits::SearchLimits,
+        transposition::{TTEntry, TTFlag, Transposition},
+    },
+    precomputed::accessor::LMR_REDUCTION,
+};
 
 const INFINITY: i16 = 30000;
 
 pub struct Searcher {
     board: Board,
-    search_stack: [MovePly; consts::MAX_MOVES],
+    search_stack: [(MovePly, Piece); consts::MAX_MOVES],
     counter_move_heuristics: CounterMoveHeuristics,
+    continuation: ContinuationHistory,
     killers: KillerMoves,
     history: History,
     nodes: u128,
@@ -45,8 +55,9 @@ impl Searcher {
     ) -> Self {
         Self {
             board: board.clone(),
-            search_stack: [MovePly::default(); consts::MAX_MOVES],
+            search_stack: [(MovePly::default(), Piece::NoPiece); consts::MAX_MOVES],
             counter_move_heuristics: CounterMoveHeuristics::default(),
+            continuation: ContinuationHistory::default(),
             killers: KillerMoves::default(),
             history: History::default(),
             nodes: 0,
@@ -73,7 +84,7 @@ impl Searcher {
         mut alpha: i16,
         beta: i16,
     ) -> i16 {
-        if self.search_limits.is_hard_stop() {
+        if self.nodes % 2048 == 0 && self.search_limits.is_hard_stop() {
             return 0;
         }
 
@@ -108,25 +119,29 @@ impl Searcher {
                 return 0;
             }
 
+            let adjusted_eval = Self::adjust_mate_distance(entry.eval, ply);
+
             match entry.tt_flag {
                 TTFlag::Exact => {
                     if ply == 0 {
                         self.tt
                             .best_move
                             .store(entry.cur_move.packed_data(), Ordering::Relaxed);
-                        self.tt.best_move_score.store(entry.eval, Ordering::Relaxed);
+                        self.tt
+                            .best_move_score
+                            .store(adjusted_eval, Ordering::Relaxed);
                     }
 
-                    return Self::adjust_mate_distance(entry.eval, ply);
+                    return adjusted_eval;
                 }
                 TTFlag::Upper => {
-                    if entry.eval <= alpha {
-                        return Self::adjust_mate_distance(alpha, ply);
+                    if adjusted_eval <= alpha {
+                        return adjusted_eval;
                     }
                 }
                 TTFlag::Lower => {
-                    if entry.eval >= beta {
-                        return Self::adjust_mate_distance(beta, ply);
+                    if adjusted_eval >= beta {
+                        return adjusted_eval;
                     }
                 }
             }
@@ -160,6 +175,8 @@ impl Searcher {
             && !pv_node
         {
             self.board.make_null_move();
+
+            self.search_stack[ply as usize] = (MovePly::default(), Piece::NoPiece);
 
             // let reduction = 3;
 
@@ -214,15 +231,20 @@ impl Searcher {
                 }
             }
 
+            self.search_stack[ply as usize] = (*curr_move, self.board.piece_at(curr_move.from()));
+
             self.nnue.make_move(curr_move, &self.board);
             self.board.make_move::<true>(curr_move);
 
-            self.search_stack[ply as usize] = *curr_move;
-
             let mut eval;
 
-            let should_reduce =
-                depth >= 3 && move_count >= 4 && !is_capture && !self.board.in_check();
+            MoveGenerator::<GEN_ALL>::update_check_data(&mut self.board);
+
+            let should_reduce = depth >= 3
+                && move_count >= 4
+                && !is_capture
+                && !self.board.in_check()
+                && !curr_move.flag().is_promotion();
 
             if move_count == 0 {
                 eval = -self.search::<NOT_ROOT>(ply + 1, depth - 1, -beta, -alpha);
@@ -278,6 +300,14 @@ impl Searcher {
                         &quiet_moves,
                         depth,
                         self.board.side_to_move(),
+                    );
+
+                    self.continuation.update(
+                        &quiet_moves,
+                        depth,
+                        ply,
+                        &self.board,
+                        &self.search_stack,
                     );
                 }
 
@@ -338,7 +368,7 @@ impl Searcher {
     }
 
     fn quiescence_search(&mut self, ply: u8, depth: u8, mut alpha: i16, beta: i16) -> i16 {
-        if self.search_limits.is_hard_stop() {
+        if self.nodes % 2048 == 0 && self.search_limits.is_hard_stop() {
             return 0;
         }
 
@@ -348,35 +378,26 @@ impl Searcher {
         let tt_entry = self.tt.probe(self.board.zobrist());
         if let Some(entry) = tt_entry {
             if !pv_node && entry.depth >= depth {
+                if self.board.is_repetition() {
+                    return 0;
+                }
+
+                let adjusted_eval = Self::adjust_mate_distance(entry.eval, ply);
+
                 match entry.tt_flag {
-                    TTFlag::Exact => return Self::adjust_mate_distance(entry.eval, ply),
+                    TTFlag::Exact => return adjusted_eval,
                     TTFlag::Upper => {
-                        if entry.eval <= alpha {
-                            return Self::adjust_mate_distance(alpha, ply);
+                        if adjusted_eval <= alpha {
+                            return adjusted_eval;
                         }
                     }
                     TTFlag::Lower => {
-                        if entry.eval >= beta {
-                            return Self::adjust_mate_distance(beta, ply);
+                        if adjusted_eval >= beta {
+                            return adjusted_eval;
                         }
                     }
                 }
             }
-        }
-
-        let eval = self.nnue.evaluate(&self.board);
-        let mut node_type = TTFlag::Upper;
-
-        if eval >= beta {
-            return beta;
-        }
-        if alpha < eval {
-            alpha = eval;
-            node_type = TTFlag::Exact;
-        }
-
-        if depth == 0 {
-            return alpha;
         }
 
         let mut all_move_list = MoveList::default();
@@ -391,6 +412,24 @@ impl Searcher {
             MatchResult::NoResult => {}
         }
 
+        let mut node_type = TTFlag::Upper;
+
+        // only return early when not in check
+        // if !self.board.in_check() || depth == 0 {
+        let eval = self.nnue.evaluate(&self.board);
+        if eval >= beta {
+            return beta;
+        }
+        if alpha < eval {
+            alpha = eval;
+            node_type = TTFlag::Exact;
+        }
+
+        if depth == 0 {
+            return alpha;
+        }
+        // }
+
         let mut tactial_move_list = MoveList::default();
         MoveGenerator::<GEN_TACTICS>::generate::<NOT_LEAF>(
             &mut self.board,
@@ -402,22 +441,28 @@ impl Searcher {
         let mut scores = [0; 256];
         for (i, mv) in tactial_move_list.iter().enumerate() {
             scores[i] = if tt_entry.is_some_and(|e| e.cur_move == *mv) {
-                30000
+                INFINITY
             } else if mv.flag().is_promotion() {
                 15000 + PIECE_VALUES[mv.flag().promotion_piece(White) as usize]
             } else {
+                // see(mv.from(), mv.to(), &self.board)
                 self.mvv_lva(mv)
             };
         }
 
         tactial_move_list.order_moves(&scores);
-        // self.order_moves(&mut tactial_move_list, &tt_entry, ply);
 
         let mut best_move = tactial_move_list.move_at(0);
 
-        for cur_move in tactial_move_list.iter() {
-            self.nnue.make_move(cur_move, &mut self.board);
-            self.board.make_move::<true>(cur_move);
+        for curr_move in tactial_move_list.iter() {
+            // if !self.board.in_check()
+            //     && see(curr_move.from(), curr_move.to(), &self.board).is_negative()
+            // {
+            //     continue;
+            // }
+
+            self.nnue.make_move(curr_move, &mut self.board);
+            self.board.make_move::<true>(curr_move);
 
             let eval = -self.quiescence_search(ply + 1, depth - 1, -beta, -alpha);
             if self.search_limits.is_hard_stop() {
@@ -428,7 +473,7 @@ impl Searcher {
             self.nnue.undo_move();
 
             if eval > alpha {
-                best_move = *cur_move;
+                best_move = *curr_move;
                 node_type = TTFlag::Exact;
                 alpha = eval;
             }
@@ -584,12 +629,7 @@ impl Searcher {
         them_value - us_value / 16
     }
 
-    fn order_moves(
-        &mut self,
-        move_list: &mut MoveList,
-        prev_best_move: &Option<TTEntry>,
-        ply_searched: u8,
-    ) {
+    fn order_moves(&mut self, move_list: &mut MoveList, prev_best_move: &Option<TTEntry>, ply: u8) {
         let mut move_values: [i16; 256] = [0; 256];
 
         let potential_entry = self.tt.probe(self.board.zobrist());
@@ -619,33 +659,39 @@ impl Searcher {
             if self.board.piece_at(curr_move.to()).is_piece() {
                 move_values[i] += self.mvv_lva(curr_move) + 16000;
                 // let see_value = see(curr_move.from(), curr_move.to(), &self.board);
+
                 // move_values[i] += if see_value.is_negative() {
-                //     see_value
+                //     see_value.saturating_sub(16000)
                 // } else {
-                //     see_value + 16000
+                //     see_value.saturating_add(16000)
                 // };
+                continue;
             } else {
+                // if let Some(value) = self.continuation.get_ply_1(
+                //     curr_move.to(),
+                //     self.board.piece_at(curr_move.from()),
+                //     ply,
+                //     &self.search_stack,
+                // ) {
+                //     move_values[i] += value;
+                // }
+
                 move_values[i] += self
                     .history
                     .get(self.board.piece_at(curr_move.from()), curr_move.to())
                     / 2;
-
-                // move_values[i] += self
-                //     .counter_move_heuristics
-                //     .get(*curr_move, self.board.side_to_move())
-                //     / 2;
             }
 
-            if self.killers.is_first_slot(*curr_move, ply_searched) {
-                move_values[i] += 10000;
+            if self.killers.is_first_slot(*curr_move, ply) {
+                move_values[i] = move_values[i].saturating_add(10000);
             }
 
-            if self.killers.is_second_slot(*curr_move, ply_searched) {
+            if self.killers.is_second_slot(*curr_move, ply) {
                 move_values[i] = move_values[i].saturating_add(8000);
             }
 
             if flag.is_castles() {
-                move_values[i] += 5000;
+                move_values[i] = move_values[i].saturating_add(5000);
             }
         }
 

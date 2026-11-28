@@ -12,7 +12,6 @@ impl LMRReduction {
             for move_index in 0..MAX_POSITIONAL_MOVES {
                 let mut lmr = 0.75 + (depth as f32).ln() * (move_index as f32).ln() / 2f32;
                 lmr = lmr.max(0f32).min(depth as f32);
-
                 reduction_table[depth][move_index] = lmr as u8;
             }
         }

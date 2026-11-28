@@ -1,7 +1,9 @@
-use crate::chess::consts::NUM_SQUARES;
-use crate::chess::types::square::Square;
-use std::fmt::{Display, Formatter};
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use std::{
+    fmt::{Display, Formatter},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not},
+};
+
+use crate::chess::{consts::NUM_SQUARES, types::square::Square};
 
 #[derive(Copy, Clone)]
 pub struct Bitboard(pub u64);

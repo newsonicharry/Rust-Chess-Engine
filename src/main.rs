@@ -1,22 +1,28 @@
-use crate::chess::board::Board;
-use crate::chess::move_generator::MoveGenerator;
-use crate::chess::move_generator::{GEN_ALL, NOT_LEAF};
-use crate::chess::move_list::MoveList;
-use crate::chess::move_ply;
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::color::Color;
-use crate::engine::arbiter::Arbiter;
-use crate::engine::perft::{BULK_PERFT, PERFT, TT_PERFT, perft};
-use crate::engine::search::Searcher;
-use crate::engine::search_limits::SearchLimits;
-use crate::engine::transposition::Transposition;
-use crate::engine::types::match_result::MatchResult;
-use crate::uci::commands::{Commands, OptionsType};
-use crate::uci::option_table::print_option_table;
-use crate::uci::parser;
-use std::env;
-use std::process::exit;
-use std::sync::Arc;
+use std::{env, process::exit, sync::Arc};
+
+use crate::{
+    chess::{
+        board::Board,
+        move_generator::{GEN_ALL, MoveGenerator, NOT_LEAF},
+        move_list::MoveList,
+        move_ply::{self, MovePly},
+        types::{color::Color, square::Square},
+    },
+    engine::{
+        arbiter::{Arbiter, MatchResult},
+        perft::{BULK_PERFT, PERFT, TT_PERFT, perft},
+        search::Searcher,
+        search_funcs::see,
+        search_limits::SearchLimits,
+        transposition::Transposition,
+    },
+    precomputed::data_dump::dump_bins,
+    uci::{
+        commands::{Commands, OptionsType},
+        option_table::print_option_table,
+        parser,
+    },
+};
 
 mod chess;
 mod engine;
@@ -38,7 +44,29 @@ fn main() {
     // run_self_play();
     // dump_bins();
     // test_code();
-    // return;
+
+    // let mut board = Board::default();
+
+    // board.new("4k3/8/8/3n4/4P3/8/8/4K3 w - - 0 1");
+    // let test1 = see(Square::E4, Square::D5, &board);
+    // println!("{test1}");
+
+    // board.new("4k3/8/4p3/3p4/4P3/8/8/4K3 w - - 0 1");
+    // let test2 = see(Square::E4, Square::D5, &board);
+    // println!("{test2}");
+
+    // board.new("4k3/8/4p3/3p4/8/8/8/3RK3 w - - 0 1");
+    // let test3 = see(Square::D1, Square::D5, &board);
+    // println!("{test3}");
+
+    // board.new("3rk3/8/8/3p4/2B1P3/8/8/4K3 w - - 0 1");
+    // let test4 = see(Square::E4, Square::D5, &board);
+    // println!("{test4}");
+
+    // board.new("3qk3/8/5n2/3p4/2B5/8/8/3RK3 w - - 0 1");
+    // let test5 = see(Square::D1, Square::D5, &board);
+    // println!("{test5}");
+
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
         match args[1].as_str() {

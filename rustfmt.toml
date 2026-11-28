@@ -1,0 +1,7 @@
+# Unstable options (require nightly rustfmt)
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+
+# Stable options
+reorder_imports = true
+imports_layout = "Mixed"

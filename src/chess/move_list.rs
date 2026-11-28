@@ -1,8 +1,12 @@
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::move_flag::MoveFlag;
-use crate::chess::types::square::Square;
-use crate::general::bits;
 use std::slice::Iter;
+
+use crate::{
+    chess::{
+        move_ply::MovePly,
+        types::{move_flag::MoveFlag, square::Square},
+    },
+    general::bits,
+};
 
 const IS_BULK: u8 = 0b00000010;
 const IS_PROMOTION: u8 = 0b00000001;

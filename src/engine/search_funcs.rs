@@ -1,57 +1,75 @@
-use crate::chess::board::Board;
-use crate::chess::consts::PIECE_VALUES;
-use crate::chess::move_ply::MovePly;
-use crate::chess::types::color::Color;
-use crate::chess::types::piece::BasePiece;
-use crate::chess::types::piece::BasePiece::{Bishop, King, Knight, Pawn, Queen, Rook};
-use crate::chess::types::square::Square;
-use crate::general::bits;
-use crate::precomputed::accessor::{
-    MOVEMENT_MASKS, bishop_lookup, queen_lookup, rook_lookup, slider_lookup,
+use std::cmp;
+
+use crate::{
+    chess::{
+        board::Board,
+        consts::PIECE_VALUES,
+        move_generator::get_attacks,
+        move_ply::MovePly,
+        types::{
+            color::Color::{self},
+            piece::{
+                BasePiece,
+                BasePiece::{Bishop, King, Knight, Pawn, Queen, Rook},
+            },
+            square::Square,
+        },
+    },
+    general::bits,
+    precomputed::accessor::{
+        MOVEMENT_MASKS, bishop_lookup, queen_lookup, rook_lookup, slider_lookup,
+    },
 };
 
-pub fn see(first_attacker_square: Square, square: Square, board: &Board) -> i16 {
-    let first_victim = board.piece_at(square);
-    if !first_victim.is_piece() {
-        return 0;
+fn is_valid_see(occupancy: u64, board: &Board, side: Color) -> bool {
+    let king_square = board.king_square(side);
+    for piece in [Bishop, Rook, Queen] {
+        let mut enemy_bb = board.bitboard(piece, !side) & occupancy;
+
+        while enemy_bb != 0 {
+            let piece_square = Square::from(bits::next(enemy_bb));
+            if get_attacks(!side, piece_square, piece, occupancy) & king_square.mask() != 0 {
+                return false;
+            }
+            enemy_bb ^= piece_square.mask();
+        }
     }
 
-    let mut gains = [0i16; 32];
-    let mut depth = 0;
-    let mut occupancy = board.occupancy() & !first_attacker_square.mask();
-    let mut occupied_by_piece = BasePiece::from(board.piece_at(first_attacker_square));
-    let mut side_to_move = !board.side_to_move();
+    true
+}
 
-    gains[0] = PIECE_VALUES[first_victim as usize];
+pub fn see(first_attacker_square: Square, square: Square, board: &Board) -> i16 {
+    let mut gain: [i16; 32] = [0; 32];
+    let mut occupancy = board.occupancy();
 
-    loop {
-        depth += 1;
-        // The gain IF we recapture: we capture occupied_by_piece...
-        gains[depth] = PIECE_VALUES[occupied_by_piece as usize] - gains[depth - 1];
+    let mut side = !board.side_to_move();
+    let mut victim = board.piece_at(first_attacker_square).into();
+    occupancy &= !first_attacker_square.mask();
+    gain[0] = PIECE_VALUES[board.piece_at(square) as usize];
 
-        // ...but only if it's not a losing recapture (the key line)
-        if gains[depth].max(-gains[depth - 1]) < 0 {
+    let mut i = 1;
+
+    while let Some((from_square, next_attacker)) =
+        least_valuable_attacker(square, side, occupancy, board)
+    {
+        occupancy ^= from_square.mask();
+
+        gain[i] = PIECE_VALUES[victim as usize] - gain[i - 1];
+        victim = next_attacker;
+
+        i += 1;
+        side = !side;
+
+        if victim == BasePiece::King {
             break;
         }
-
-        let Some((attacker_square, piece)) =
-            least_valuable_attacker(square, side_to_move, occupancy, board)
-        else {
-            break;
-        };
-
-        occupancy &= !attacker_square.mask();
-        occupied_by_piece = piece;
-        side_to_move = !side_to_move;
     }
 
-    // Resolve backwards — each side picks the best outcome
-    while depth > 0 {
-        depth -= 1;
-        gains[depth] = -(-gains[depth]).max(gains[depth + 1]);
+    for idx in (1..i).rev() {
+        gain[idx - 1] = -cmp::max(-gain[idx - 1], gain[idx]);
     }
 
-    gains[0]
+    gain[0]
 }
 
 fn least_valuable_attacker(
@@ -60,33 +78,55 @@ fn least_valuable_attacker(
     occupancy: u64,
     board: &Board,
 ) -> Option<(Square, BasePiece)> {
-    // Check piece types LVA order: Pawn, Knight, Bishop, Rook, Queen, King
-    let pawn_attacks =
+    let mut pawn_attacks =
         MOVEMENT_MASKS.pawn_attacks(!side, square) & board.bitboard(Pawn, side) & occupancy;
-    if pawn_attacks != 0 {
-        return Some((Square::from(bits::next(pawn_attacks)), Pawn));
+    while pawn_attacks != 0 {
+        let pawn_square = Square::from(bits::next(pawn_attacks));
+        pawn_attacks ^= pawn_square.mask();
+        if is_valid_see(occupancy ^ pawn_square.mask(), board, side) {
+            return Some((pawn_square, Pawn));
+        }
     }
 
-    let knight_attacks =
+    let mut knight_attacks =
         MOVEMENT_MASKS.knight[square as usize] & board.bitboard(Knight, side) & occupancy;
-    if knight_attacks != 0 {
-        return Some((Square::from(bits::next(knight_attacks)), Knight));
+    while knight_attacks != 0 {
+        let knight_square = Square::from(bits::next(knight_attacks));
+        knight_attacks ^= knight_square.mask();
+        if is_valid_see(occupancy ^ knight_square.mask(), board, side) {
+            return Some((knight_square, Knight));
+        }
     }
 
-    let bishop_attacks =
+    let mut bishop_attacks =
         bishop_lookup(square, occupancy) & board.bitboard(Bishop, side) & occupancy;
-    if bishop_attacks != 0 {
-        return Some((Square::from(bits::next(bishop_attacks)), Bishop));
+    while bishop_attacks != 0 {
+        let bishop_square = Square::from(bits::next(bishop_attacks));
+        bishop_attacks ^= bishop_square.mask();
+
+        if is_valid_see(occupancy ^ bishop_square.mask(), board, side) {
+            return Some((bishop_square, Bishop));
+        }
     }
 
-    let rook_attacks = rook_lookup(square, occupancy) & board.bitboard(Rook, side) & occupancy;
-    if rook_attacks != 0 {
-        return Some((Square::from(bits::next(rook_attacks)), Rook));
+    let mut rook_attacks = rook_lookup(square, occupancy) & board.bitboard(Rook, side) & occupancy;
+    while rook_attacks != 0 {
+        let rook_square = Square::from(bits::next(rook_attacks));
+        rook_attacks ^= rook_square.mask();
+
+        if is_valid_see(occupancy ^ rook_square.mask(), board, side) {
+            return Some((rook_square, Rook));
+        }
     }
 
-    let queen_attacks = queen_lookup(square, occupancy) & board.bitboard(Queen, side) & occupancy;
-    if queen_attacks != 0 {
-        return Some((Square::from(bits::next(queen_attacks)), Queen));
+    let mut queen_attacks =
+        queen_lookup(square, occupancy) & board.bitboard(Queen, side) & occupancy;
+    while queen_attacks != 0 {
+        let queen_square = Square::from(bits::next(queen_attacks));
+        queen_attacks ^= queen_square.mask();
+        if is_valid_see(occupancy ^ queen_square.mask(), board, side) {
+            return Some((queen_square, Queen));
+        }
     }
 
     let king_attacks =

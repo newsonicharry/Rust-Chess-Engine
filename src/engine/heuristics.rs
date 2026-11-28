@@ -1,9 +1,11 @@
-use crate::chess::board::Board;
-use crate::chess::consts::{NUM_PIECES, NUM_SQUARES};
-use crate::chess::types::color::Color;
-use crate::chess::types::piece::Piece;
-use crate::chess::types::square::Square;
-use crate::chess::{consts::MAX_DEPTH, move_ply::MovePly};
+use std::mem::MaybeUninit;
+
+use crate::chess::{
+    board::Board,
+    consts::{MAX_DEPTH, MAX_MOVES, NUM_PIECES, NUM_SQUARES},
+    move_ply::MovePly,
+    types::{color::Color, piece::Piece, square::Square},
+};
 
 pub struct KillerMoves {
     data: [[MovePly; 2]; MAX_DEPTH],
@@ -19,6 +21,10 @@ impl Default for KillerMoves {
 
 impl KillerMoves {
     pub fn update(&mut self, played: MovePly, depth: u8) {
+        if self.data[depth as usize][0] == played {
+            return;
+        }
+
         self.data[depth as usize][1] = self.data[depth as usize][0];
         self.data[depth as usize][0] = played;
     }
@@ -115,5 +121,91 @@ impl History {
 
     pub fn get(&self, piece: Piece, square: Square) -> i16 {
         self.table[piece as usize][square as usize]
+    }
+}
+
+type Ply1 = [[[[i16; NUM_PIECES]; NUM_SQUARES]; NUM_PIECES]; NUM_SQUARES];
+// type Ply2 = [[Ply1; NUM_PIECES]; NUM_SQUARES];
+// type Ply3 = [[Ply2; NUM_PIECES]; NUM_SQUARES];
+// type Ply4 = [[Ply3; NUM_PIECES]; NUM_SQUARES];
+
+pub struct ContinuationHistory {
+    ply_1_table: Ply1,
+    // ply_2_table: Ply2,
+    // ply_4_table: Ply4,
+}
+
+impl Default for ContinuationHistory {
+    fn default() -> Self {
+        Self {
+            ply_1_table: unsafe { MaybeUninit::zeroed().assume_init() },
+            // ply_2_table: unsafe { MaybeUninit::zeroed().assume_init() },
+            // ply_4_table: unsafe { MaybeUninit::zeroed().assume_init() },
+        }
+    }
+}
+
+impl ContinuationHistory {
+    pub fn update(
+        &mut self,
+        other_quiets: &Vec<MovePly>,
+        depth: u8,
+        ply: u8,
+        board: &Board,
+        search_stack: &[(MovePly, Piece); MAX_MOVES],
+    ) {
+        let clamped_update = |entry: &mut i16, bonus: i16| {
+            *entry += bonus - (*entry as i32 * bonus.abs() as i32 / MAX_HISTORY as i32) as i16;
+        };
+
+        let (cutoff_move, cutoff_piece) = search_stack[ply as usize];
+
+        let ply_1 = ply as i16 - 1;
+        if ply_1.is_negative() {
+            return;
+        }
+
+        let cutoff_to = cutoff_move.to() as usize;
+        let cutoff_piece = cutoff_piece as usize;
+        let ply_1_to = search_stack[ply_1 as usize].0.to() as usize;
+        let ply_1_piece = search_stack[ply_1 as usize].1 as usize;
+
+        if ply_1_piece >= NUM_PIECES {
+            return;
+        }
+
+        let entry = &mut self.ply_1_table[cutoff_to][cutoff_piece][ply_1_to][ply_1_piece];
+        let bonus = (depth as i16).pow(2).min(400);
+
+        clamped_update(entry, bonus);
+
+        for quiet in other_quiets {
+            let quiet_to = quiet.to() as usize;
+            let quiet_piece = board.piece_at(quiet.from()) as usize;
+            let entry = &mut self.ply_1_table[quiet_to][quiet_piece][ply_1_to][ply_1_piece];
+            clamped_update(entry, -bonus);
+        }
+    }
+
+    pub fn get_ply_1(
+        &self,
+        to: Square,
+        piece: Piece,
+        ply: u8,
+        search_stack: &[(MovePly, Piece); MAX_MOVES],
+    ) -> Option<i16> {
+        if ply < 1 {
+            return None;
+        }
+
+        let ply_1 = (ply - 1) as usize;
+        let next_to = search_stack[ply_1].0.to() as usize;
+        let next_piece = search_stack[ply_1].1 as usize;
+
+        if next_piece >= NUM_PIECES {
+            return None;
+        }
+
+        Some(self.ply_1_table[to as usize][piece as usize][next_to][next_piece])
     }
 }
